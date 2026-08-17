@@ -1486,7 +1486,8 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
               title={checkedIn ? '點擊取消報到' : '標記已報到'}
             >{checkedIn ? '✓ 報到' : '報到'}</button>
           )}
-          {isAdmin && (
+          {/* 季繳（★固定班底）不用逐場繳費，故只有臨打球員才顯示繳費徽章 */}
+          {isAdmin && player.regular !== true && (
             <button
               onClick={(e) => { e.stopPropagation(); onTogglePaid && onTogglePaid(player.id); }}
               style={chip(player.paid === true, '#fbbf24')}
@@ -1538,7 +1539,6 @@ window.Sidebar = Sidebar;
 function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
   const [query, setQuery] = React.useState('');
   const [selId, setSelId] = React.useState(null);
-  const [paid, setPaid] = React.useState(false);
 
   const list = (players || []).slice().sort(function(a, b) {
     if (!!a.checkedIn !== !!b.checkedIn) return a.checkedIn ? 1 : -1; // 未報到在前
@@ -1590,18 +1590,13 @@ function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
           <Header />
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>CHECK-IN 確認報到</div>
           <div style={{ fontSize: 26, fontWeight: 800, fontFamily: "'Noto Sans TC', sans-serif", color: 'var(--text)' }}>{sel.name}</div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}>
-            <input type="checkbox" checked={paid} onChange={function(e) { setPaid(e.target.checked); }} style={{ accentColor: '#fbbf24', width: 18, height: 18 }} />
-            <span style={{ fontSize: 14, color: paid ? '#fbbf24' : 'var(--muted)', fontFamily: "'Noto Sans TC', sans-serif" }}>
-              我已繳費（現場付現可先不勾，交給管理者）
-            </span>
-          </label>
+          <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>確認後即完成報到、加入排點。</p>
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-            <button onClick={function() { setSelId(null); setPaid(false); }} style={{
+            <button onClick={function() { setSelId(null); }} style={{
               flex: '0 0 auto', background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
               borderRadius: 10, padding: '13px 20px', fontSize: 14, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
             }}>返回</button>
-            <button onClick={function() { onCheckIn(sel.id, paid); }} style={{
+            <button onClick={function() { onCheckIn(sel.id, false); }} style={{
               flex: 1, background: accent, color: '#0a1a10', border: 'none',
               borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 800, letterSpacing: 1,
               cursor: 'pointer', boxShadow: `0 8px 22px ${accent}55`, fontFamily: "'Noto Sans TC', sans-serif",
@@ -1641,7 +1636,7 @@ function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
           ) : filtered.map(function(p) {
             return (
               <button key={p.id}
-                onClick={function() { p.checkedIn ? onCheckIn(p.id, false) : (setSelId(p.id), setPaid(false)); }}
+                onClick={function() { p.checkedIn ? onCheckIn(p.id, false) : setSelId(p.id); }}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
                   background: p.checkedIn ? 'transparent' : '#0d1218',
