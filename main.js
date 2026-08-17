@@ -354,6 +354,14 @@ window.__DND = (function() {
       if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
       ghost = null;
       if (overKey !== null) { overKey = null; notify(); }
+    },
+
+    // 拖曳中用「第二根手指」手動捲動頁面（多點觸控）。捲完重算手指底下的落點。
+    manualScroll: function(dy) {
+      if (!src || !dy) return;
+      pageScrollBy(dy);
+      var k = hitTest(lastX, lastY);
+      if (k !== overKey) { overKey = k; notify(); }
     }
   };
 })();
@@ -378,14 +386,35 @@ window.useDragSource = function(makeSrc, enabled, label) {
   //   addEventListener 註冊的實體與後續 removeEventListener 想移除的實體會對不上，
   //   拖曳結束後攔截器殘留在 document 上 → 整頁 touchmove 永久被 preventDefault
   //   → 平板放完球員後就再也無法捲動。故用 useRef 固定同一個函式實體。
+  // 追蹤「第二根手指」以支援拖曳中多點觸控滑動（iPhone 那種一指拖、一指滑）
+  var secondRef = React.useRef({ id: null, lastY: 0 });
   var blockerRef = React.useRef(null);
   if (!blockerRef.current) {
-    blockerRef.current = function(e) { if (e.cancelable) e.preventDefault(); };
+    blockerRef.current = function(e) {
+      // 全程攔截原生捲動：iOS 才不會在第二指落下時 pointercancel 中斷拖曳。
+      if (e.cancelable) e.preventDefault();
+      var ts = e.touches;
+      if (ts && ts.length >= 2) {
+        // 以「最後落下的那根手指」的垂直位移手動捲動頁面（手指上移→內容上捲）
+        var t2 = ts[ts.length - 1];
+        var s = secondRef.current;
+        if (s.id !== t2.identifier) { s.id = t2.identifier; s.lastY = t2.clientY; }
+        else {
+          var dy = s.lastY - t2.clientY;
+          s.lastY = t2.clientY;
+          if (dy && window.__DND) window.__DND.manualScroll(dy);
+        }
+      } else {
+        secondRef.current.id = null;   // 回到單指 → 清掉第二指狀態
+      }
+    };
   }
   function addBlocker() {
+    secondRef.current.id = null;
     document.addEventListener('touchmove', blockerRef.current, { passive: false });
   }
   function removeBlocker() {
+    secondRef.current.id = null;
     document.removeEventListener('touchmove', blockerRef.current, { passive: false });
   }
 
