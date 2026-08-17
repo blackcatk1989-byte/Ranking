@@ -1834,17 +1834,12 @@ function App() {
   var [joined, setJoined] = React.useState(role !== 'player' ? true : null);
 
   var [qrOpen, setQROpen] = React.useState(false);
-  // isPortrait：其實代表「compact 堆疊版面」。
-  // 觸發條件＝觸控裝置（手機／平板，任何方向）或視窗寬度 ≤1180px。
-  // 不再限制 orientation:portrait，否則平板橫向會退回桌機固定版面 → 整頁無法捲動。
-  // 須與 index.html 的 media query 保持一致。
-  var COMPACT_MQ = '(max-width: 1180px), (hover: none) and (pointer: coarse)';
   var [isPortrait, setIsPortrait] = React.useState(function() {
-    return typeof window !== 'undefined' && window.matchMedia(COMPACT_MQ).matches;
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px) and (orientation: portrait)').matches;
   });
 
   React.useEffect(function() {
-    var mq = window.matchMedia(COMPACT_MQ);
+    var mq = window.matchMedia('(max-width: 1180px) and (orientation: portrait)');
     var on = function() { setIsPortrait(mq.matches); };
     mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on);
     return function() { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on); };
