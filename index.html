@@ -73,14 +73,10 @@
     white-space: nowrap;
   }
 
-  /* 直向（手機 + 平板）：與 main.js 的 isPortrait 判斷保持一致。
-     改由「整份文件（window）」捲動這個最標準的模型：html/body 高度放開、
-     不再限制 100%，讓內容自然把文件撐高由 window 捲。
-     舊寫法 html,body{height:100%;overflow:auto}+#root{height:100dvh} 會形成
-     巢狀捲動容器，導致拖曳時程式化的自動捲動（pageScrollBy）找不到正確的捲動對象。 */
+  /* 直向（手機 + 平板）：與 main.js 的 isPortrait 判斷保持一致 */
   @media (max-width: 1180px) and (orientation: portrait) {
-    html, body { height: auto; overflow: visible; -webkit-overflow-scrolling: touch; }
-    #root { height: auto; min-height: 100dvh; }
+    html, body { overflow: auto; }
+    #root { height: 100dvh; }
   }
   </style>
 </head>
