@@ -871,8 +871,9 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
       borderLeft: isPortrait ? 'none' : '1px solid var(--line)',
       borderTop: isPortrait ? '1px solid var(--line)' : 'none',
       display: 'flex', flexDirection: 'column',
-      height: isPortrait ? '100%' : '100%',
-      flex: isPortrait ? '0 0 auto' : 'none',
+      height: '100%', minHeight: 0,
+      // 直向：填滿場地橫幅下方的剩餘空間，名單在內部自己捲動
+      flex: isPortrait ? '1 1 0' : 'none',
     }}>
       {/* Header */}
       <div style={{
@@ -942,12 +943,12 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
         <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'#3a4555',marginRight:5}}/>休息</span>
       </div>
 
-      {/* 球員清單（可拖回場地球員的放置區） */}
+      {/* 球員清單（可拖回場地球員的放置區）。直向也在此內部捲動。 */}
       <div
         data-drop="bench"
         style={{
-          flex: isPortrait ? 'none' : 1,
-          overflowY: isPortrait ? 'visible' : 'auto',
+          flex: 1, minHeight: 0,
+          overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
           padding: '8px 10px',
           transition: 'background 160ms',
@@ -2821,10 +2822,11 @@ function App() {
 
   return (
     <div style={{
-      minHeight: '100dvh',
-      height: isPortrait ? 'auto' : '100dvh',
+      // 直向也用固定 100dvh：場地常駐上方、名單在下方自己捲動（不再整頁捲動）
+      height: '100dvh',
       width: '100vw',
       display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
       background: tweaks.theme === 'minimal'
         ? '#0c1016'
         : 'radial-gradient(ellipse at 20% 0%, #1a2533 0%, #131820 60%, #0c1016 100%)',
@@ -2845,25 +2847,25 @@ function App() {
         minHeight: 0, minWidth: 0,
       }}>
         <main style={{
+          // 直向：固定高度的「場地橫幅」，並排、常駐可見、不隨名單捲動
           width: isPortrait ? '100%' : '70%',
-          height: isPortrait ? 'auto' : '100%',
-          flex: isPortrait ? '1 1 auto' : 'none',
+          height: isPortrait ? '40dvh' : '100%',
+          flex: isPortrait ? '0 0 auto' : 'none',
           minWidth: 0, minHeight: 0,
-          padding: isPortrait ? '12px 12px 8px' : '16px 18px',
+          padding: isPortrait ? '10px 10px 4px' : '16px 18px',
           display: 'flex',
-          flexDirection: isPortrait ? 'column' : 'row',
-          gap: isPortrait ? 10 : 16,
+          flexDirection: 'row',
+          gap: isPortrait ? 8 : 16,
         }}>
           {courts.map(function(c, i) {
             return (
               <div
                 key={animKeys[i] + '-' + i}
                 style={{
-                  flex: isPortrait ? 'none' : 1,
+                  flex: 1,
                   display: 'flex',
                   minHeight: 0, minWidth: 0,
-                  width: isPortrait ? '100%' : 'auto',
-                  aspectRatio: isPortrait ? '5 / 4' : 'auto',
+                  width: 'auto',
                   animation: animatingCourts[i]
                     ? 'fadeOut 260ms ease forwards'
                     : 'fadeIn 520ms cubic-bezier(.2,.8,.2,1) both',
