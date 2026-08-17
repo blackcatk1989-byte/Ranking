@@ -286,14 +286,28 @@ window.useDropOver = function(key) {
 window.useDragSource = function(makeSrc, enabled, label) {
   var ref = React.useRef({ active: false, moved: false, x: 0, y: 0, id: null, timer: null, captured: false });
 
-  // 拖曳啟動後，阻止瀏覽器把手指移動解讀成捲動
-  function blockScroll(e) { if (e.cancelable) e.preventDefault(); }
+  // 拖曳啟動後，阻止瀏覽器把手指移動解讀成捲動。
+  // ⚠ blockScroll 必須是「穩定參照」：若每次 render 重新產生新函式，
+  //   addEventListener 註冊的實體與後續 removeEventListener 想移除的實體會對不上，
+  //   拖曳結束後攔截器殘留在 document 上 → 整頁 touchmove 永久被 preventDefault
+  //   → 平板放完球員後就再也無法捲動。故用 useRef 固定同一個函式實體。
+  var blockerRef = React.useRef(null);
+  if (!blockerRef.current) {
+    blockerRef.current = function(e) { if (e.cancelable) e.preventDefault(); };
+  }
   function addBlocker() {
-    document.addEventListener('touchmove', blockScroll, { passive: false });
+    document.addEventListener('touchmove', blockerRef.current, { passive: false });
   }
   function removeBlocker() {
-    document.removeEventListener('touchmove', blockScroll, { passive: false });
+    document.removeEventListener('touchmove', blockerRef.current, { passive: false });
   }
+
+  // 保險：元件卸載時，確保殘留的攔截器一定被移除，避免捲動被鎖死。
+  React.useEffect(function() {
+    return function() {
+      document.removeEventListener('touchmove', blockerRef.current, { passive: false });
+    };
+  }, []);
 
   function clearTimer() {
     var st = ref.current;
