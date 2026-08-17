@@ -69,10 +69,15 @@
     white-space: nowrap;
   }
 
-  /* 直向（手機 + 平板）：與 main.js 的 isPortrait 判斷保持一致 */
-  @media (max-width: 1180px) and (orientation: portrait) {
-    html, body { overflow: auto; }
-    #root { height: 100dvh; }
+  /* 觸控裝置（手機 + 平板，任何方向）或視窗寬度 ≤1180px：改用可捲動版面。
+     注意：這裡刻意「不」再限制 orientation:portrait。
+     舊條件只在直向開啟捲動，導致平板「橫向」時 body 維持 overflow:hidden，
+     整頁被鎖死無法捲動 / 滑動。改成用 pointer:coarse 偵測觸控裝置後，
+     平板橫向、大尺寸平板、橫向手機都能正常捲動。
+     須與 main.js 的 isPortrait（compact 版面）matchMedia 判斷保持一致。 */
+  @media (max-width: 1180px), (hover: none) and (pointer: coarse) {
+    html, body { overflow: auto; -webkit-overflow-scrolling: touch; }
+    #root { height: auto; min-height: 100dvh; }
   }
   </style>
 </head>
