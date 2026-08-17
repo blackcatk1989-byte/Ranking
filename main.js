@@ -23,6 +23,23 @@ window.normalizePlayer = function(p) {
   return Object.assign({ games: 0, consecutiveGames: 0, partners: {}, opponents: {}, pinned: true, regular: true }, p);
 };
 
+// 臨打名單批次解析：把貼上的多行文字轉成一串姓名。
+// 規則：只取「開頭是數字編號」的行（例如 "8.JJ"、"11.秉諭 🌐"、"15. 言"），
+//       這樣標題行（如 "🎯 臨打報名"）與空行會自動被略過；
+//       去掉開頭編號與分隔符，並移除姓名尾端的 emoji / 標記（如 🌐）與空白。
+window.parseGuestList = function(text) {
+  var names = [];
+  String(text || '').split(/\r?\n/).forEach(function(line) {
+    var m = line.match(/^\s*\d+\s*[.．、,:)\-\s]+(.+)$/);
+    if (!m) return;                       // 沒有開頭編號 → 略過（標題／空行）
+    var name = m[1]
+      .replace(/[\s\u{200D}\u{FE0F}\u{2190}-\u{27BF}\u{2B00}-\u{2BFF}\u{1F000}-\u{1FAFF}]+$/u, '') // 去尾端 emoji/符號
+      .trim();
+    if (name) names.push(name);
+  });
+  return names;
+};
+
 // 排程演算法（score-based exhaustive search）
 // score = 實力差² × W_LEVEL + 出場數標準差 × W_FAIR
 //       + 重複隊友 × W_PARTNER + 連續出賽 × W_CONSEC
@@ -783,10 +800,14 @@ window.TopBar = TopBar;
 // ════════════════════════════════════════════════════════════════════════════
 
 // 右側球員名單 - 支援 admin / player 兩種角色
-function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, onAddPlayer, onDeletePlayer, onTogglePin, isPortrait }) {
+function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, onAddPlayer, onImportPlayers, onDeletePlayer, onTogglePin, isPortrait }) {
   const isAdmin = role === 'admin';
   const [editingId, setEditingId] = React.useState(null);
   const [addOpen, setAddOpen] = React.useState(false);
+  const [importOpen, setImportOpen] = React.useState(false);
+
+  const existingNames = {};
+  players.forEach(function(p) { existingNames[p.name] = true; });
 
   const pinnedCount = players.filter(p => p.regular).length;
 
@@ -824,20 +845,37 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
           </div>
         </div>
         {isAdmin ? (
-          <button
-            onClick={() => setAddOpen(true)}
-            style={{
-              background: 'transparent',
-              border: `1px solid ${accent}66`,
-              color: accent, borderRadius: 7, padding: '5px 10px',
-              fontSize: 11, fontWeight: 700, cursor: 'pointer',
-              fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: 0.5,
-              whiteSpace: 'nowrap', flexShrink: 0,
-              transition: 'all 120ms',
-            }}
-          >
-            + 新增
-          </button>
+          <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+            <button
+              onClick={() => setImportOpen(true)}
+              title="批次匯入臨打名單"
+              style={{
+                background: 'transparent',
+                border: `1px solid var(--line)`,
+                color: 'var(--muted)', borderRadius: 7, padding: '5px 10px',
+                fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: 0.5,
+                whiteSpace: 'nowrap',
+                transition: 'all 120ms',
+              }}
+            >
+              匯入
+            </button>
+            <button
+              onClick={() => setAddOpen(true)}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${accent}66`,
+                color: accent, borderRadius: 7, padding: '5px 10px',
+                fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: 0.5,
+                whiteSpace: 'nowrap',
+                transition: 'all 120ms',
+              }}
+            >
+              + 新增
+            </button>
+          </div>
         ) : (
           <div style={{
             fontSize: 10, color: 'var(--dim)',
@@ -918,6 +956,19 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
             setAddOpen(false);
           }}
           onCancel={function() { setAddOpen(false); }}
+        />
+      )}
+
+      {/* Import Guests Dialog */}
+      {importOpen && isAdmin && (
+        <ImportDialog
+          accent={accent}
+          existingNames={existingNames}
+          onImport={function(names, level) {
+            onImportPlayers(names, level);
+            setImportOpen(false);
+          }}
+          onCancel={function() { setImportOpen(false); }}
         />
       )}
 
@@ -1072,17 +1123,146 @@ function AddPlayerDialog({ accent, onAdd, onCancel }) {
   );
 }
 
+// 臨打名單批次匯入對話框
+function ImportDialog({ accent, existingNames, onImport, onCancel }) {
+  const [text, setText] = React.useState('');
+  const [level, setLevel] = React.useState(6);
+
+  const parsed = window.parseGuestList(text);
+  const seen = {};
+  const toAdd = [];
+  const dup = [];
+  parsed.forEach(function(n) {
+    if (seen[n]) return; seen[n] = true;
+    if (existingNames[n]) dup.push(n); else toAdd.push(n);
+  });
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        background: 'rgba(0,0,0,0.65)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 16,
+      }}
+    >
+      <div
+        onClick={function(e) { e.stopPropagation(); }}
+        style={{
+          background: '#1a2029', border: '1px solid var(--line)',
+          borderRadius: 16, padding: '24px 24px 20px',
+          width: 460, maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
+          display: 'flex', flexDirection: 'column', gap: 16,
+        }}
+      >
+        <div style={{
+          fontFamily: "'JetBrains Mono', monospace",
+          fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)',
+        }}>IMPORT 臨打名單</div>
+
+        <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, fontFamily: "'Noto Sans TC', sans-serif" }}>
+          直接貼上報名清單即可（可含編號、標題行、🌐 等標記，會自動忽略）。<br/>
+          匯入的球員<span style={{ color: '#fbbf24' }}> 星號不會點亮</span>（視為臨打，重設時清除）。
+        </div>
+
+        <textarea
+          value={text}
+          onChange={function(e) { setText(e.target.value); }}
+          placeholder={'🎯 臨打報名\n8.JJ\n9.珉佑\n10.土豆\n11.秉諭 🌐\n...'}
+          rows={8}
+          style={{
+            background: '#0c1016', border: '1.5px solid #2a3340', borderRadius: 9,
+            padding: '10px 12px', color: '#fff', fontSize: 14, outline: 'none',
+            fontFamily: "'JetBrains Mono','Noto Sans TC', monospace", lineHeight: 1.5,
+            width: '100%', resize: 'vertical',
+          }}
+        />
+
+        {/* 統一等級 */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1 }}>統一等級 LEVEL</span>
+            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 800, fontSize: 26, color: accent, lineHeight: 1 }}>{level}</span>
+          </div>
+          <input type="range" min={1} max={12} value={level}
+            onChange={function(e) { setLevel(+e.target.value); }}
+            style={{ width: '100%', accentColor: accent }} />
+        </div>
+
+        {/* 預覽 */}
+        <div style={{
+          fontSize: 12, color: 'var(--muted)', fontFamily: "'Noto Sans TC', sans-serif",
+          borderTop: '1px solid var(--line)', paddingTop: 12,
+        }}>
+          {parsed.length === 0
+            ? <span style={{ color: 'var(--dim)' }}>尚未偵測到名單…</span>
+            : (
+              <React.Fragment>
+                將新增 <span style={{ color: accent, fontWeight: 800 }}>{toAdd.length}</span> 位
+                {dup.length > 0 && <span style={{ color: 'var(--dim)' }}>（略過 {dup.length} 位重複：{dup.join('、')}）</span>}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  {toAdd.map(function(n, i) {
+                    return <span key={i} style={{
+                      fontSize: 12, padding: '3px 9px', borderRadius: 6,
+                      background: `${accent}18`, color: accent, border: `1px solid ${accent}44`,
+                      fontFamily: "'Noto Sans TC', sans-serif",
+                    }}>{n}</span>;
+                  })}
+                </div>
+              </React.Fragment>
+            )}
+        </div>
+
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button
+            onClick={onCancel}
+            style={{
+              background: 'transparent', border: '1px solid var(--line)',
+              color: 'var(--muted)', borderRadius: 8, padding: '8px 18px',
+              fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+            }}
+          >取消</button>
+          <button
+            onClick={function() { if (toAdd.length) onImport(toAdd, level); }}
+            disabled={toAdd.length === 0}
+            style={{
+              background: toAdd.length ? accent : `${accent}55`,
+              border: 'none', color: '#0a1a10', borderRadius: 8, padding: '8px 22px',
+              fontSize: 13, fontWeight: 800,
+              cursor: toAdd.length ? 'pointer' : 'not-allowed',
+              fontFamily: "'Noto Sans TC', sans-serif",
+            }}
+          >匯入 {toAdd.length} 位</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function LevelDialog({ player, accent, onCommit, onCancel }) {
   const [level, setLevel] = React.useState(player.level || 6);
+  const [games, setGames] = React.useState(player.games || 0);
+
+  function setG(v) { setGames(Math.max(0, Math.min(999, v | 0))); }
 
   React.useEffect(function() {
     function onKey(e) {
       if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter') onCommit(level);
+      if (e.key === 'Enter') onCommit({ level: level, games: games });
     }
     window.addEventListener('keydown', onKey);
     return function() { window.removeEventListener('keydown', onKey); };
-  }, [level]);
+  }, [level, games]);
+
+  const stepBtn = {
+    width: 44, height: 44, borderRadius: 10,
+    background: '#0c1016', border: '1.5px solid #2a3340',
+    color: 'var(--text)', fontSize: 24, fontWeight: 700, lineHeight: 1,
+    cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    userSelect: 'none',
+  };
 
   return (
     <div
@@ -1107,7 +1287,7 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: 11, fontWeight: 700, letterSpacing: 2,
           color: 'var(--muted)',
-        }}>EDIT LEVEL</div>
+        }}>EDIT PLAYER</div>
 
         <div style={{
           fontSize: 18, fontWeight: 700,
@@ -1139,6 +1319,29 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
           </div>
         </div>
 
+        {/* 場次（可手動調整） */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <span style={{
+            fontSize: 11, color: 'var(--muted)',
+            fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1,
+          }}>場次 GAMES</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14 }}>
+            <button onClick={function() { setG(games - 1); }} style={stepBtn} title="減一場">−</button>
+            <input
+              type="number" min={0} value={games}
+              onChange={function(e) { setG(+e.target.value); }}
+              style={{
+                width: 90, textAlign: 'center',
+                background: '#0c1016', border: '1.5px solid #2a3340', borderRadius: 9,
+                padding: '6px 4px', color: '#fff',
+                fontSize: 30, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace",
+                outline: 'none',
+              }}
+            />
+            <button onClick={function() { setG(games + 1); }} style={stepBtn} title="加一場">+</button>
+          </div>
+        </div>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button
             onClick={onCancel}
@@ -1150,7 +1353,7 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
             }}
           >取消</button>
           <button
-            onClick={function() { onCommit(level); }}
+            onClick={function() { onCommit({ level: level, games: games }); }}
             style={{
               background: accent, border: 'none', color: '#0a1a10',
               borderRadius: 8, padding: '8px 22px',
@@ -1268,12 +1471,17 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
           }}
         >刪除</button>
       ) : (
-        <div style={{
-          fontFamily: "'JetBrains Mono', monospace",
-          fontSize: 18, fontWeight: 700,
-          color: isMe ? highlightColor : onCourt ? accent : 'var(--dim)',
-          minWidth: 24, textAlign: 'right',
-        }}>
+        <div
+          onClick={isAdmin ? function(e) { e.stopPropagation(); onBeginEdit(); } : undefined}
+          title={isAdmin ? '點擊調整等級 / 場次' : undefined}
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 18, fontWeight: 700,
+            color: isMe ? highlightColor : onCourt ? accent : 'var(--dim)',
+            minWidth: 24, textAlign: 'right',
+            cursor: isAdmin ? 'pointer' : 'default',
+          }}
+        >
           {String(player.games).padStart(2,'0')}
         </div>
       )}
@@ -2148,8 +2356,30 @@ function App() {
     saveToStorage(next, courts, roundNumbers);
   }
 
-  function handleEditLevel(pid, level) {
-    var next = players.map(function(p) { return p.id === pid ? Object.assign({}, p, { level: level }) : p; });
+  // 批次匯入臨打球員：星號不亮（regular:false），重設時會被清除
+  function handleImportPlayers(names, level) {
+    var existing = {};
+    players.forEach(function(p) { existing[p.name] = true; });
+    var ts = Date.now();
+    var added = [];
+    names.forEach(function(nm, i) {
+      if (existing[nm]) return;          // 防呆：略過已存在的名字
+      existing[nm] = true;
+      added.push(window.normalizePlayer({
+        id: 'p-' + ts + '-' + i, name: nm, level: level || 6, games: 0,
+        pinned: false, regular: false,
+      }));
+    });
+    if (added.length === 0) return;
+    var next = players.concat(added);
+    setPlayers(next);
+    saveToStorage(next, courts, roundNumbers);
+  }
+
+  // patch 可能是舊的純數字（等級）或新的 { level, games } 物件，兩者都相容
+  function handleEditLevel(pid, patch) {
+    var upd = (typeof patch === 'object' && patch !== null) ? patch : { level: patch };
+    var next = players.map(function(p) { return p.id === pid ? Object.assign({}, p, upd) : p; });
     setPlayers(next);
     savePlayers(next);
   }
@@ -2377,6 +2607,7 @@ function App() {
           role={role}
           onEditLevel={handleEditLevel}
           onAddPlayer={handleAddPlayer}
+          onImportPlayers={handleImportPlayers}
           onDeletePlayer={handleDeletePlayer}
           onTogglePin={handleTogglePin}
           isPortrait={isPortrait}
