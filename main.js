@@ -260,14 +260,15 @@ window.__DND = (function() {
   // 拖曳時把球員拖到畫面外的場地：手指靠近上/下邊緣就自動捲動。
   // 直式時捲整頁；橫式時若手指在可捲動的名單內就捲那個容器。
   function pageScrollBy(dy) {
-    // 不同瀏覽器/版面下真正的捲動容器可能是 html、body 或 window，逐一嘗試。
-    var doc = document.scrollingElement || document.documentElement;
-    var b1 = doc.scrollTop; doc.scrollTop += dy;
-    if (doc.scrollTop !== b1) return;
-    var body = document.body;
-    var b2 = body.scrollTop; body.scrollTop += dy;
-    if (body.scrollTop !== b2) return;
+    // 直向已改為 window 捲動模型，window.scrollBy 最可靠；先用它。
+    var before = window.pageYOffset;
     window.scrollBy(0, dy);
+    if (window.pageYOffset !== before) return;
+    // fallback：某些版面捲動容器仍在 html 或 body 上，逐一嘗試（非捲動者會被夾住不動）。
+    var de = document.documentElement, bo = document.body;
+    var d0 = de.scrollTop; de.scrollTop += dy;
+    if (de.scrollTop !== d0) return;
+    bo.scrollTop += dy;
   }
   function nearestScrollableY(x, y) {
     var el = document.elementFromPoint(x, y);
