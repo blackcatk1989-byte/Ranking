@@ -1956,8 +1956,10 @@ function App() {
   }, []); // 只在 mount 時執行一次
 
   // ── 球員加入網址 ────────────────────────────────────────────────────────
+  // 從管理者目前所在的網址自動推導（同一個部署 + ?player），
+  // 不再寫死舊網址；日後換網域 / 路徑也不用改程式，QR 永遠指向現在這一版。
   var playerUrl = React.useMemo(function() {
-    return 'https://arku1305.github.io/badminton-with-you-scheduler/?player';
+    return window.location.origin + window.location.pathname + '?player';
   }, []);
 
   React.useEffect(function() {
