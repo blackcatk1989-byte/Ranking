@@ -21,8 +21,10 @@ window.DEFAULT_EVENT = DEFAULT_EVENT;
 // 球員資料正規化（補齊新欄位）
 window.normalizePlayer = function(p) {
   // checkedIn：是否已報到（未報到＝名字不亮、不能拖曳、不進排點）
-  // paid：是否已繳費（獨立記錄，不影響排點）
-  return Object.assign({ games: 0, consecutiveGames: 0, partners: {}, opponents: {}, pinned: true, regular: true, checkedIn: false, paid: false }, p);
+  // paid：是否已繳費（獨立記錄，不影響排點；季繳球員不適用）
+  // regular（★）：常客/保留，重整時不消失
+  // seasonPass（季）：季繳身分＝固定班底、免繳費，重整時也保留
+  return Object.assign({ games: 0, consecutiveGames: 0, partners: {}, opponents: {}, pinned: true, regular: true, checkedIn: false, paid: false, seasonPass: false }, p);
 };
 
 // 臨打名單批次解析：把貼上的多行文字轉成一串姓名。
@@ -1248,17 +1250,24 @@ function ImportDialog({ accent, existingNames, onImport, onCancel }) {
 function LevelDialog({ player, accent, onCommit, onCancel }) {
   const [level, setLevel] = React.useState(player.level || 6);
   const [games, setGames] = React.useState(player.games || 0);
+  const [season, setSeason] = React.useState(player.seasonPass === true);
 
   function setG(v) { setGames(Math.max(0, Math.min(999, v | 0))); }
+  function commit() {
+    // 勾選季繳＝固定班底，順便把 ★ 點亮（取消季繳不動 ★，交給管理者手動）
+    var patch = { level: level, games: games, seasonPass: season };
+    if (season) patch.regular = true;
+    onCommit(patch);
+  }
 
   React.useEffect(function() {
     function onKey(e) {
       if (e.key === 'Escape') onCancel();
-      if (e.key === 'Enter') onCommit({ level: level, games: games });
+      if (e.key === 'Enter') commit();
     }
     window.addEventListener('keydown', onKey);
     return function() { window.removeEventListener('keydown', onKey); };
-  }, [level, games]);
+  }, [level, games, season]);
 
   const stepBtn = {
     width: 44, height: 44, borderRadius: 10,
@@ -1346,6 +1355,19 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
           </div>
         </div>
 
+        {/* 季繳球員（免繳費、重整保留） */}
+        <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none' }}>
+          <input
+            type="checkbox" checked={season}
+            onChange={function(e) { setSeason(e.target.checked); }}
+            style={{ accentColor: '#34d399', width: 16, height: 16 }}
+          />
+          <span style={{
+            fontSize: 13, color: season ? '#34d399' : 'var(--muted)',
+            fontFamily: "'Noto Sans TC', sans-serif", transition: 'color 120ms',
+          }}>季繳球員（免繳費）</span>
+        </label>
+
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button
             onClick={onCancel}
@@ -1357,7 +1379,7 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
             }}
           >取消</button>
           <button
-            onClick={function() { onCommit({ level: level, games: games }); }}
+            onClick={commit}
             style={{
               background: accent, border: 'none', color: '#0a1a10',
               borderRadius: 8, padding: '8px 22px',
@@ -1452,6 +1474,12 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
             background: '#eab308', color: '#1a1408',
             padding: '1px 5px', borderRadius: 4,
           }}>ME</span>}
+          {player.seasonPass === true && <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+            background: '#34d39922', color: '#34d399', border: '1px solid #34d39955',
+            padding: '1px 6px', borderRadius: 4,
+            fontFamily: "'Noto Sans TC', sans-serif",
+          }}>季繳</span>}
           {!checkedIn && <span style={{
             fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
             background: '#2a3340', color: '#c0c7d0',
@@ -1486,8 +1514,8 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
               title={checkedIn ? '點擊取消報到' : '標記已報到'}
             >{checkedIn ? '✓ 報到' : '報到'}</button>
           )}
-          {/* 季繳（★固定班底）不用逐場繳費，故只有臨打球員才顯示繳費徽章 */}
-          {isAdmin && player.regular !== true && (
+          {/* 季繳球員免逐場繳費，故只有「非季繳」的球員才顯示繳費徽章 */}
+          {isAdmin && player.seasonPass !== true && (
             <button
               onClick={(e) => { e.stopPropagation(); onTogglePaid && onTogglePaid(player.id); }}
               style={chip(player.paid === true, '#fbbf24')}
@@ -2510,8 +2538,8 @@ function App() {
     if (role !== 'admin') return;
     if (!confirm('確定要重設？所有資料將清除。')) return;
 
-    // 重設＝新的一場：保留★固定班底，但所有人都要重新報到／繳費
-    var kept = players.filter(function(p) { return p.regular; }).map(function(p) {
+    // 重設＝新的一場：保留★常客與季繳球員，但所有人都要重新報到／繳費
+    var kept = players.filter(function(p) { return p.regular || p.seasonPass; }).map(function(p) {
       return Object.assign({}, p, { games: 0, consecutiveGames: 0, partners: {}, opponents: {}, checkedIn: false, paid: false });
     });
 
