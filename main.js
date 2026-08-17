@@ -535,7 +535,7 @@ function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
         style={{
           width: '100%', height: '100%', minHeight: 60,
           borderRadius: 10,
-          touchAction: 'none',
+          touchAction: 'manipulation',
           border: `1.5px dashed ${dragOver ? accent : 'rgba(255,255,255,0.2)'}`,
           background: dragOver ? `${accent}22` : 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -559,7 +559,7 @@ function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
       style={{
         width: '100%', height: '100%', minHeight: 60,
         borderRadius: 12,
-        touchAction: 'none',
+        touchAction: 'manipulation',
         WebkitUserSelect: 'none',
         WebkitTouchCallout: 'none',
         background: dragOver ? `${highlightColor}bb` : bgGradient,
@@ -797,6 +797,7 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
         style={{
           flex: isPortrait ? 'none' : 1,
           overflowY: isPortrait ? 'visible' : 'auto',
+          WebkitOverflowScrolling: 'touch',
           padding: '8px 10px',
           transition: 'background 160ms',
           background: dragOverBench ? `${accent}08` : 'transparent',
@@ -1114,7 +1115,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
       style={{
-        touchAction: isAdmin && !onCourt ? 'none' : 'auto',
+        touchAction: 'manipulation',
         WebkitUserSelect: 'none',
         WebkitTouchCallout: 'none',
         display: 'flex', alignItems: 'center', gap: 10,
@@ -1834,11 +1835,11 @@ function App() {
 
   var [qrOpen, setQROpen] = React.useState(false);
   var [isPortrait, setIsPortrait] = React.useState(function() {
-    return typeof window !== 'undefined' && window.matchMedia('(max-width: 820px) and (orientation: portrait)').matches;
+    return typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px) and (orientation: portrait)').matches;
   });
 
   React.useEffect(function() {
-    var mq = window.matchMedia('(max-width: 820px) and (orientation: portrait)');
+    var mq = window.matchMedia('(max-width: 1180px) and (orientation: portrait)');
     var on = function() { setIsPortrait(mq.matches); };
     mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on);
     return function() { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on); };

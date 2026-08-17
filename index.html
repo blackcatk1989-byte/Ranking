@@ -69,13 +69,8 @@
     white-space: nowrap;
   }
 
-  /* 手機直向 */
-  @media (max-width: 820px) and (orientation: portrait) {
-    html, body { overflow: auto; }
-    #root { height: 100dvh; }
-  }
-  /* 平板直向（舊版遺漏，導致平板版面落在斷點外） */
-  @media (min-width: 821px) and (max-width: 1180px) and (orientation: portrait) {
+  /* 直向（手機 + 平板）：與 main.js 的 isPortrait 判斷保持一致 */
+  @media (max-width: 1180px) and (orientation: portrait) {
     html, body { overflow: auto; }
     #root { height: 100dvh; }
   }
