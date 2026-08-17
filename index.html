@@ -31,13 +31,22 @@
   button{font-family:inherit;color:inherit}
   #root{height:100vh;width:100vw}
 
-  /* ── 拖曳所需：關閉瀏覽器預設的觸控行為，否則手指移動會被判定成捲動 ── */
+  /* ── 拖曳元素 ──────────────────────────────────────────────────
+     注意：這裡刻意「不」設 touch-action: none。
+     設了雖然拖曳會動，但手指按在球員卡片上就無法捲動頁面。
+     改用 manipulation：捲動保持正常，長按 250ms 才進入拖曳模式，
+     拖曳期間再由 JS 動態攔截 touchmove 阻止捲動。 */
   [data-drop]{
-    touch-action: none;
+    touch-action: manipulation;
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
+  }
+  /* 拖曳進行中：整頁鎖住捲動，避免畫面亂跑 */
+  body.dnd-active{
+    overflow: hidden !important;
+    touch-action: none;
   }
 
   /* ── 拖曳時跟隨手指的浮動卡片（取代 HTML5 原生拖曳影像） ── */

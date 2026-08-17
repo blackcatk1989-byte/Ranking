@@ -24,9 +24,27 @@ window.normalizePlayer = function(p) {
 };
 
 // 排程演算法（score-based exhaustive search）
-// score = 實力差² × 100 + 出場數標準差 × 10 + 重複隊友次數 × 3
+// score = 實力差² × W_LEVEL + 出場數標準差 × W_FAIR
+//       + 重複隊友 × W_PARTNER + 連續出賽 × W_CONSEC
+//
+// ⚠ 權重調整說明（針對「奇數等級會讓同一組一直打」的問題）：
+// 舊版實力差權重為 100。全部使用偶數等級時，兩隊實力和很容易湊到完全相等
+// （差 0），這一項歸零，後面的公平性考量才有機會決定結果。
+// 但只要出現奇數等級，實力差常常最少只能到 1，此項就變成 1²×100 = 100，
+// 直接壓過出場數（數十分）與重複隊友（個位數），
+// 導致系統為了將實力差從 1 縮到 0，寧可讓同一組人一直上場。
+// 新版降低實力權重、拉高公平性權重，並新增連續出賽惩罰。
 // options: { numCourts: 1|2 }  預設 2
+// 權重常數（要微調手感改這裡就好）
+window.SCHED_WEIGHTS = {
+  LEVEL:   20,   // 實力差²。舊值 100 太高，會壓死其他考量
+  FAIR:    60,   // 出場數總和（見下方 calcScore）。拉高後「大家輪流上場」優先
+  PARTNER: 10,   // 重複隊友。舊值 3，拉高後比較不會一直同一組
+  CONSEC:  40    // 連續出賽懲罰（新增）。剛打完的人不會馬上又被排上
+};
+
 window.scheduleNextRound = function(players, options) {
+  var W = window.SCHED_WEIGHTS;
   var PER_COURT = 4;
   var NUM_COURTS = (options && options.numCourts) ? options.numCourts : 2;
   var NEED = NUM_COURTS * PER_COURT;
@@ -48,17 +66,26 @@ window.scheduleNextRound = function(players, options) {
       var t1 = ca[0], t2 = ca[1];
       var s1 = t1.reduce(function(a, p) { return a + (p.level || 6); }, 0);
       var s2 = t2.reduce(function(a, p) { return a + (p.level || 6); }, 0);
-      s += (s1 - s2) * (s1 - s2) * 100;
+      s += (s1 - s2) * (s1 - s2) * W.LEVEL;
     });
 
+    // 公平性：直接惩罰「選到已經打很多場的人」
+    // 舊版這裡算的是「被選中這 4 人彼此出場數是否接近」，
+    // 並不是「有沒有優先選到出場數最少的人」。
+    // 四個已經打很多場的人標準差也是 0，舊版完全不介意，
+    // 這就是人數不是 4 的倍數時會有人一直被跳過的真正原因。
     var g = all.map(function(p) { return p.games || 0; });
-    var mean = g.reduce(function(a, b) { return a + b; }, 0) / g.length;
-    var variance = g.reduce(function(a, v) { return a + (v - mean) * (v - mean); }, 0) / g.length;
-    s += Math.sqrt(variance) * 10;
+    var total = g.reduce(function(a, b) { return a + b; }, 0);
+    s += total * W.FAIR;
+
+    // 連續出賽惩罰：上一場剛打過的人再被排上就加分（分數越低越好）
+    all.forEach(function(p) {
+      s += (p.consecutiveGames || 0) * W.CONSEC;
+    });
 
     courtAssigns.forEach(function(ca) {
       [ca[0], ca[1]].forEach(function(t) {
-        if (t.length >= 2) s += ((t[0].partners || {})[t[1].id] || 0) * 3;
+        if (t.length >= 2) s += ((t[0].partners || {})[t[1].id] || 0) * W.PARTNER;
       });
     });
     return s;
@@ -211,6 +238,7 @@ window.__DND = (function() {
       src = s;
       ghost = document.createElement('div');
       ghost.className = 'dnd-ghost';
+      document.body.classList.add('dnd-active');
       ghost.textContent = label || '';
       document.body.appendChild(ghost);
       this.move(x, y);
@@ -235,6 +263,7 @@ window.__DND = (function() {
 
     cancel: function() {
       src = null;
+      document.body.classList.remove('dnd-active');
       if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
       ghost = null;
       if (overKey !== null) { overKey = null; notify(); }
@@ -255,26 +284,76 @@ window.useDropOver = function(key) {
 // 拖曳來源：回傳一組 pointer 事件 handler
 // makeSrc: function → 來源資料物件；label: 浮動卡片上的文字
 window.useDragSource = function(makeSrc, enabled, label) {
-  var ref = React.useRef({ active: false, moved: false, x: 0, y: 0, id: null });
+  var ref = React.useRef({ active: false, moved: false, x: 0, y: 0, id: null, timer: null, captured: false });
+
+  // 拖曳啟動後，阻止瀏覽器把手指移動解讀成捲動
+  function blockScroll(e) { if (e.cancelable) e.preventDefault(); }
+  function addBlocker() {
+    document.addEventListener('touchmove', blockScroll, { passive: false });
+  }
+  function removeBlocker() {
+    document.removeEventListener('touchmove', blockScroll, { passive: false });
+  }
+
+  function clearTimer() {
+    var st = ref.current;
+    if (st.timer) { clearTimeout(st.timer); st.timer = null; }
+  }
+
+  function beginDrag(e, x, y) {
+    var st = ref.current;
+    st.moved = true;
+    st.captured = false;
+    try {
+      if (st.el) { st.el.setPointerCapture(st.id); st.captured = true; }
+    } catch (err) {}
+    addBlocker();
+    // 震動回饋，讓使用者知道已經進入拖曳模式
+    try { if (navigator.vibrate) navigator.vibrate(15); } catch (err) {}
+    window.__DND.start(makeSrc(), label, x, y);
+    window.__DND.move(x, y);
+  }
 
   function down(e) {
     if (!enabled) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    // 按在按鈕、輸入框等互動元件上時不啟動拖曳
+    if (e.target && e.target.closest &&
+        e.target.closest('button, input, select, textarea, a, [data-no-drag]')) return;
+
     var st = ref.current;
     st.active = true; st.moved = false;
     st.x = e.clientX; st.y = e.clientY; st.id = e.pointerId;
-    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+    st.el = e.currentTarget;
+    st.touch = (e.pointerType === 'touch' || e.pointerType === 'pen');
+
+    clearTimer();
+    if (st.touch) {
+      // ── 觸控：長按 250ms 才進入拖曳。這段期間手指一動就改成捲動頁面。
+      var sx = e.clientX, sy = e.clientY;
+      st.timer = setTimeout(function() {
+        st.timer = null;
+        if (st.active && !st.moved) beginDrag(e, sx, sy);
+      }, 250);
+    }
+    // 滑鼠不需長按，超過 6px 位移就直接拖
   }
 
   function move(e) {
     var st = ref.current;
     if (!st.active || e.pointerId !== st.id) return;
+
     if (!st.moved) {
-      // 位移小於 6px 視為點擊，避免誤觸
-      if (Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y) < 6) return;
-      st.moved = true;
-      window.__DND.start(makeSrc(), label, e.clientX, e.clientY);
+      var dist = Math.abs(e.clientX - st.x) + Math.abs(e.clientY - st.y);
+      if (st.touch) {
+        // 長按尚未成立前就移動，視為使用者要捲動頁面：放棄拖曳
+        if (dist > 10) { clearTimer(); st.active = false; }
+        return;
+      }
+      if (dist < 6) return;
+      beginDrag(e, e.clientX, e.clientY);
     }
+
     if (e.cancelable) e.preventDefault();
     window.__DND.move(e.clientX, e.clientY);
   }
@@ -282,15 +361,21 @@ window.useDragSource = function(makeSrc, enabled, label) {
   function up(e) {
     var st = ref.current;
     if (!st.active || e.pointerId !== st.id) return;
+    clearTimer();
     st.active = false;
-    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
-    if (st.moved) { st.moved = false; window.__DND.end(); }
+    if (st.captured) {
+      try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (err) {}
+      st.captured = false;
+    }
+    if (st.moved) { st.moved = false; removeBlocker(); window.__DND.end(); }
   }
 
   function cancel(e) {
     var st = ref.current;
+    clearTimer();
     if (!st.active) return;
-    st.active = false; st.moved = false;
+    st.active = false; st.moved = false; st.captured = false;
+    removeBlocker();
     window.__DND.cancel();
   }
 
