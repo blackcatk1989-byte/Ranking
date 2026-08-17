@@ -29,7 +29,9 @@
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter','Noto Sans TC',-apple-system,sans-serif;height:100%;overflow:hidden;-webkit-font-smoothing:antialiased}
   button{font-family:inherit;color:inherit}
-  #root{height:100vh;width:100vw}
+  /* 用 dvh（動態視窗高度）而非 vh：平板/手機瀏覽器的 100vh 是「網址列隱藏時」
+     的最大高度，會比實際可見範圍大，導致橫向時底部內容被切掉又無法捲動。 */
+  #root{height:100dvh;width:100vw}
 
   /* ── 拖曳元素 ──────────────────────────────────────────────────
      注意：這裡刻意「不」設 touch-action: none。
@@ -43,9 +45,10 @@
     -webkit-touch-callout: none;
     -webkit-tap-highlight-color: transparent;
   }
-  /* 拖曳進行中：整頁鎖住捲動，避免畫面亂跑 */
+  /* 拖曳進行中：用 touch-action:none 阻止「手指」直接捲動（實際攔截由 JS 的
+     touchmove blocker 負責），但「不」再設 overflow:hidden ——
+     否則邊緣自動捲動（把球員拖到畫面外的場地）會被鎖死無法程式化捲動。 */
   body.dnd-active{
-    overflow: hidden !important;
     touch-action: none;
   }
 

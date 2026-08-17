@@ -210,12 +210,16 @@ window.__DND = (function() {
   var overKey = null;      // 目前懸停的放置目標 key
   var ghost = null;        // 跟隨手指的浮動卡片
   var subs = [];
+  var lastX = 0, lastY = 0; // 最近一次指標視窗座標（供自動捲動重算落點）
+  var edgeV = 0;           // 目前邊緣自動捲動速度（px/frame，正=向下）
+  var rafId = null;        // 自動捲動的 requestAnimationFrame id
 
   function notify() {
     for (var i = 0; i < subs.length; i++) subs[i](overKey);
   }
 
   // 用 elementFromPoint 偵測放置目標（取代 dragover 事件）
+  // ghost 設了 pointer-events:none，不會擋到偵測，但仍額外隱藏以求保險。
   function hitTest(x, y) {
     if (ghost) ghost.style.visibility = 'hidden';
     var el = document.elementFromPoint(x, y);
@@ -223,6 +227,51 @@ window.__DND = (function() {
     if (!el || !el.closest) return null;
     var t = el.closest('[data-drop]');
     return t ? t.getAttribute('data-drop') : null;
+  }
+
+  // ── 邊緣自動捲動 ────────────────────────────────────────────────────────
+  // 拖曳時把球員拖到畫面外的場地：手指靠近上/下邊緣就自動捲動。
+  // 直式時捲整頁；橫式時若手指在可捲動的名單內就捲那個容器。
+  function pageScrollBy(dy) {
+    // 不同瀏覽器/版面下真正的捲動容器可能是 html、body 或 window，逐一嘗試。
+    var doc = document.scrollingElement || document.documentElement;
+    var b1 = doc.scrollTop; doc.scrollTop += dy;
+    if (doc.scrollTop !== b1) return;
+    var body = document.body;
+    var b2 = body.scrollTop; body.scrollTop += dy;
+    if (body.scrollTop !== b2) return;
+    window.scrollBy(0, dy);
+  }
+  function nearestScrollableY(x, y) {
+    var el = document.elementFromPoint(x, y);
+    while (el && el !== document.body && el !== document.documentElement) {
+      var ov = window.getComputedStyle(el).overflowY;
+      if ((ov === 'auto' || ov === 'scroll') && el.scrollHeight > el.clientHeight + 1) return el;
+      el = el.parentElement;
+    }
+    return null; // 沒有可捲動容器 → 捲整頁
+  }
+  function autoTick() {
+    if (!src || edgeV === 0) { rafId = null; return; }
+    var sc = nearestScrollableY(lastX, lastY);
+    if (sc) sc.scrollTop += edgeV; else pageScrollBy(edgeV);
+    // 捲動後手指底下的落點會變，重新偵測（ghost 位置維持貼在手指視窗座標，不需動）
+    var k = hitTest(lastX, lastY);
+    if (k !== overKey) { overKey = k; notify(); }
+    rafId = requestAnimationFrame(autoTick);
+  }
+  function updateEdge(y) {
+    var vh = window.innerHeight || document.documentElement.clientHeight;
+    var edge = 90;      // 邊緣感應區高度(px)
+    var maxSpeed = 22;  // 每幀最大捲動量(px)
+    if (y < edge)            edgeV = -Math.ceil((edge - y) / edge * maxSpeed);
+    else if (y > vh - edge)  edgeV =  Math.ceil((y - (vh - edge)) / edge * maxSpeed);
+    else edgeV = 0;
+    if (edgeV !== 0 && rafId == null) rafId = requestAnimationFrame(autoTick);
+  }
+  function stopAuto() {
+    edgeV = 0;
+    if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
   }
 
   return {
@@ -246,12 +295,14 @@ window.__DND = (function() {
 
     move: function(x, y) {
       if (!src) return;
+      lastX = x; lastY = y;
       if (ghost) {
         ghost.style.left = x + 'px';
         ghost.style.top = y + 'px';
       }
       var k = hitTest(x, y);
       if (k !== overKey) { overKey = k; notify(); }
+      updateEdge(y); // 依手指離邊緣的距離決定是否自動捲動
     },
 
     end: function() {
@@ -262,6 +313,7 @@ window.__DND = (function() {
     },
 
     cancel: function() {
+      stopAuto();
       src = null;
       document.body.classList.remove('dnd-active');
       if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
@@ -2249,8 +2301,8 @@ function App() {
 
   return (
     <div style={{
-      minHeight: '100vh',
-      height: isPortrait ? 'auto' : '100vh',
+      minHeight: '100dvh',
+      height: isPortrait ? 'auto' : '100dvh',
       width: '100vw',
       display: 'flex', flexDirection: 'column',
       background: tweaks.theme === 'minimal'
