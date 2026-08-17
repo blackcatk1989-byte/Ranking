@@ -234,17 +234,23 @@ window.__DND = (function() {
   var lastX = 0, lastY = 0; // 最近一次指標視窗座標（供自動捲動重算落點）
   var edgeV = 0;           // 目前邊緣自動捲動速度（px/frame，正=向下）
   var rafId = null;        // 自動捲動的 requestAnimationFrame id
+  var moveRAF = null;      // 拖曳移動的 rAF 批次 id（每幀只處理一次，iOS 才順）
 
   function notify() {
     for (var i = 0; i < subs.length; i++) subs[i](overKey);
   }
 
-  // 用 elementFromPoint 偵測放置目標（取代 dragover 事件）
-  // ghost 設了 pointer-events:none，不會擋到偵測，但仍額外隱藏以求保險。
+  // 用 transform（translate3d）定位 ghost：只走合成層，不觸發 layout，iOS 較順。
+  function positionGhost() {
+    if (ghost) ghost.style.transform =
+      'translate3d(' + lastX + 'px,' + lastY + 'px,0) translate(-50%,-50%) scale(1.06)';
+  }
+
+  // 用 elementFromPoint 偵測放置目標（取代 dragover 事件）。
+  // ghost 有 pointer-events:none，elementFromPoint 本來就會忽略它，
+  // 因此「不」需要每幀隱藏/顯示 ghost（那會造成兩次強制重排，是 iOS 卡頓主因）。
   function hitTest(x, y) {
-    if (ghost) ghost.style.visibility = 'hidden';
     var el = document.elementFromPoint(x, y);
-    if (ghost) ghost.style.visibility = '';
     if (!el || !el.closest) return null;
     var t = el.closest('[data-drop]');
     return t ? t.getAttribute('data-drop') : null;
@@ -295,6 +301,16 @@ window.__DND = (function() {
     if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; }
   }
 
+  // 每幀批次處理拖曳移動：定位 ghost + 偵測落點 + 邊緣捲動判斷
+  function flushMove() {
+    moveRAF = null;
+    if (!src) return;
+    positionGhost();
+    var k = hitTest(lastX, lastY);
+    if (k !== overKey) { overKey = k; notify(); }
+    updateEdge(lastY);
+  }
+
   return {
     subscribe: function(fn) {
       subs.push(fn);
@@ -306,24 +322,21 @@ window.__DND = (function() {
 
     start: function(s, label, x, y) {
       src = s;
+      lastX = x; lastY = y;
       ghost = document.createElement('div');
       ghost.className = 'dnd-ghost';
       document.body.classList.add('dnd-active');
       ghost.textContent = label || '';
       document.body.appendChild(ghost);
-      this.move(x, y);
+      positionGhost();                 // 立刻定位，避免第一幀閃在左上角
+      flushMove();                     // 先算一次落點
     },
 
     move: function(x, y) {
       if (!src) return;
       lastX = x; lastY = y;
-      if (ghost) {
-        ghost.style.left = x + 'px';
-        ghost.style.top = y + 'px';
-      }
-      var k = hitTest(x, y);
-      if (k !== overKey) { overKey = k; notify(); }
-      updateEdge(y); // 依手指離邊緣的距離決定是否自動捲動
+      // 只記座標，實際處理丟到下一個動畫幀（每幀最多一次，避免 iOS 卡頓）
+      if (moveRAF == null) moveRAF = requestAnimationFrame(flushMove);
     },
 
     end: function() {
@@ -335,6 +348,7 @@ window.__DND = (function() {
 
     cancel: function() {
       stopAuto();
+      if (moveRAF != null) { cancelAnimationFrame(moveRAF); moveRAF = null; }
       src = null;
       document.body.classList.remove('dnd-active');
       if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
