@@ -20,7 +20,9 @@ window.DEFAULT_EVENT = DEFAULT_EVENT;
 
 // 球員資料正規化（補齊新欄位）
 window.normalizePlayer = function(p) {
-  return Object.assign({ games: 0, consecutiveGames: 0, partners: {}, opponents: {}, pinned: true, regular: true }, p);
+  // checkedIn：是否已報到（未報到＝名字不亮、不能拖曳、不進排點）
+  // paid：是否已繳費（獨立記錄，不影響排點）
+  return Object.assign({ games: 0, consecutiveGames: 0, partners: {}, opponents: {}, pinned: true, regular: true, checkedIn: false, paid: false }, p);
 };
 
 // 臨打名單批次解析：把貼上的多行文字轉成一串姓名。
@@ -800,7 +802,7 @@ window.TopBar = TopBar;
 // ════════════════════════════════════════════════════════════════════════════
 
 // 右側球員名單 - 支援 admin / player 兩種角色
-function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, onAddPlayer, onImportPlayers, onDeletePlayer, onTogglePin, isPortrait }) {
+function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, onAddPlayer, onImportPlayers, onDeletePlayer, onTogglePin, onToggleCheckIn, onTogglePaid, isPortrait }) {
   const isAdmin = role === 'admin';
   const [editingId, setEditingId] = React.useState(null);
   const [addOpen, setAddOpen] = React.useState(false);
@@ -841,7 +843,7 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
             fontSize: 11, color: 'var(--muted)', marginTop: 2,
             fontFamily: "'JetBrains Mono', monospace",
           }}>
-            {players.length} PLAYERS · {pinnedCount}★<br/>{onCourtIds.size} ON COURT
+            {players.length} PLAYERS · {pinnedCount}★ · 報到 {players.filter(function(p){return p.checkedIn;}).length}<br/>{onCourtIds.size} ON COURT
           </div>
         </div>
         {isAdmin ? (
@@ -918,6 +920,8 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
             onEditLevel={onEditLevel}
             onDelete={onDeletePlayer}
             onTogglePin={onTogglePin}
+            onToggleCheckIn={onToggleCheckIn}
+            onTogglePaid={onTogglePaid}
           />
         ))}
 
@@ -1367,16 +1371,30 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
   );
 }
 
-function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit, onEditLevel, onDelete, onTogglePin }) {
+function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit, onEditLevel, onDelete, onTogglePin, onToggleCheckIn, onTogglePaid }) {
   const [hover, setHover] = React.useState(false);
+  const checkedIn = player.checkedIn === true;
 
+  // 只有「已報到」的球員能拖曳
   const dragHandlers = window.useDragSource(
     function() { return { from: 'bench', id: player.id }; },
-    isAdmin && !onCourt,
+    isAdmin && !onCourt && checkedIn,
     player.name
   );
 
   const highlightColor = isMe ? '#eab308' : accent;
+
+  // 報到 / 繳費 小徽章樣式（active = 已完成，實心；否則外框）
+  const chip = function(active, col) {
+    return {
+      background: active ? col : 'transparent',
+      border: '1px solid ' + (active ? col : '#3a4555'),
+      color: active ? '#0a1a10' : 'var(--muted)',
+      cursor: 'pointer', padding: '2px 9px', borderRadius: 5,
+      fontFamily: "'Noto Sans TC', sans-serif", fontSize: 11, fontWeight: 700,
+      minHeight: 24, lineHeight: 1.4, whiteSpace: 'nowrap', transition: 'all 120ms',
+    };
+  };
 
   return (
     <div
@@ -1412,8 +1430,8 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
         <div style={{
           fontWeight: 600, fontSize: 14,
           fontFamily: "'Noto Sans TC', sans-serif",
-          display: 'flex', alignItems: 'center', gap: 6,
-          color: isMe ? '#fbd34d' : 'var(--text)',
+          display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
+          color: isMe ? '#fbd34d' : (checkedIn ? 'var(--text)' : 'var(--dim)'),
         }}>
           {isAdmin ? (
             <button
@@ -1434,11 +1452,17 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
             background: '#eab308', color: '#1a1408',
             padding: '1px 5px', borderRadius: 4,
           }}>ME</span>}
+          {!checkedIn && <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
+            background: '#2a3340', color: '#c0c7d0',
+            padding: '1px 6px', borderRadius: 4,
+            fontFamily: "'Noto Sans TC', sans-serif",
+          }}>未報到</span>}
         </div>
         <div style={{
-          fontSize: 10, color: 'var(--muted)', marginTop: 2,
+          fontSize: 10, color: 'var(--muted)', marginTop: 3,
           fontFamily: "'JetBrains Mono', monospace",
-          display: 'flex', gap: 8, alignItems: 'center',
+          display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
         }}>
           {isAdmin && (
             <button
@@ -1454,6 +1478,20 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
             >
               Lv {player.level}
             </button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleCheckIn && onToggleCheckIn(player.id); }}
+              style={chip(checkedIn, '#34d399')}
+              title={checkedIn ? '點擊取消報到' : '標記已報到'}
+            >{checkedIn ? '✓ 報到' : '報到'}</button>
+          )}
+          {isAdmin && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onTogglePaid && onTogglePaid(player.id); }}
+              style={chip(player.paid === true, '#fbbf24')}
+              title={player.paid === true ? '點擊取消繳費' : '標記已繳費'}
+            >{player.paid === true ? '✓ 繳費' : '繳費'}</button>
           )}
           {onCourt && <span style={{color:accent,fontWeight:700}}>ON COURT</span>}
         </div>
@@ -1496,10 +1534,151 @@ window.Sidebar = Sidebar;
 // ════════════════════════════════════════════════════════════════════════════
 
 // 加入活動頁面 - 支援 admin / player 兩種模式
-function JoinScreen({ onJoin, onSkip, theme, accent, role }) {
+// 球員自助報到：從名單挑自己的名字 → 確認報到（可選同時繳費）
+function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
+  const [query, setQuery] = React.useState('');
+  const [selId, setSelId] = React.useState(null);
+  const [paid, setPaid] = React.useState(false);
+
+  const list = (players || []).slice().sort(function(a, b) {
+    if (!!a.checkedIn !== !!b.checkedIn) return a.checkedIn ? 1 : -1; // 未報到在前
+    return String(a.name).localeCompare(String(b.name), 'zh-Hant');
+  });
+  const q = query.trim().toLowerCase();
+  const filtered = q ? list.filter(function(p) { return String(p.name).toLowerCase().indexOf(q) !== -1; }) : list;
+  const sel = selId ? (players || []).find(function(p) { return p.id === selId; }) : null;
+
+  const shell = {
+    minHeight: '100dvh', width: '100vw',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'radial-gradient(ellipse at top, #1a2533 0%, #131820 50%, #0c1016 100%)',
+    padding: 24,
+  };
+  const card = {
+    width: '100%', maxWidth: 460, maxHeight: '90dvh',
+    background: '#1a2029', border: '1px solid var(--line)',
+    borderRadius: 18, padding: '28px 26px',
+    boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
+    display: 'flex', flexDirection: 'column', gap: 14,
+  };
+
+  function Header() {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span style={{
+          width: 34, height: 34, borderRadius: 9, background: accent,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 18, color: '#0a1a10', fontWeight: 900,
+        }}>羽</span>
+        <div>
+          <div style={{ fontWeight: 800, fontSize: 16, letterSpacing: 1 }}>
+            排點 <span style={{ color: 'var(--muted)', fontWeight: 500, fontSize: 11 }}>報到</span>
+          </div>
+          <div style={{ fontSize: 10, color: 'var(--dim)', marginTop: 2, fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1 }}>
+            星期二 · 20:00–22:00 · 南科新力羽球館
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 確認畫面 ──
+  if (sel) {
+    return (
+      <div style={shell}>
+        <div style={card}>
+          <Header />
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>CHECK-IN 確認報到</div>
+          <div style={{ fontSize: 26, fontWeight: 800, fontFamily: "'Noto Sans TC', sans-serif", color: 'var(--text)' }}>{sel.name}</div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', userSelect: 'none', padding: '4px 0' }}>
+            <input type="checkbox" checked={paid} onChange={function(e) { setPaid(e.target.checked); }} style={{ accentColor: '#fbbf24', width: 18, height: 18 }} />
+            <span style={{ fontSize: 14, color: paid ? '#fbbf24' : 'var(--muted)', fontFamily: "'Noto Sans TC', sans-serif" }}>
+              我已繳費（現場付現可先不勾，交給管理者）
+            </span>
+          </label>
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button onClick={function() { setSelId(null); setPaid(false); }} style={{
+              flex: '0 0 auto', background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
+              borderRadius: 10, padding: '13px 20px', fontSize: 14, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+            }}>返回</button>
+            <button onClick={function() { onCheckIn(sel.id, paid); }} style={{
+              flex: 1, background: accent, color: '#0a1a10', border: 'none',
+              borderRadius: 10, padding: '13px', fontSize: 15, fontWeight: 800, letterSpacing: 1,
+              cursor: 'pointer', boxShadow: `0 8px 22px ${accent}55`, fontFamily: "'Noto Sans TC', sans-serif",
+            }}>完成報到</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── 名單挑選畫面 ──
+  return (
+    <div style={shell}>
+      <div style={card}>
+        <Header />
+        <h2 style={{ margin: '2px 0 0', fontSize: 22, fontWeight: 700, fontFamily: "'Noto Sans TC', sans-serif" }}>選擇你的名字報到</h2>
+        <p style={{ margin: 0, color: 'var(--muted)', fontSize: 13, lineHeight: 1.6 }}>
+          找到你在 LINE 報名的名字，點一下即可完成報到、加入排點。
+        </p>
+        <input
+          value={query}
+          onChange={function(e) { setQuery(e.target.value); }}
+          placeholder="搜尋名字…"
+          style={{
+            width: '100%', background: '#0d1218', border: '1.5px solid var(--line)',
+            borderRadius: 10, padding: '11px 14px', color: 'var(--text)', fontSize: 15,
+            fontFamily: "'Noto Sans TC', sans-serif", outline: 'none',
+          }}
+          onFocus={function(e) { e.target.style.borderColor = accent; }}
+          onBlur={function(e) { e.target.style.borderColor = 'var(--line)'; }}
+        />
+        <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 60, maxHeight: '42dvh' }}>
+          {filtered.length === 0 ? (
+            <div style={{ color: 'var(--dim)', fontSize: 13, textAlign: 'center', padding: '20px 0', fontFamily: "'Noto Sans TC', sans-serif" }}>
+              {(players || []).length === 0 ? '名單載入中，或尚未建立…' : '找不到這個名字，請通知管理者。'}
+            </div>
+          ) : filtered.map(function(p) {
+            return (
+              <button key={p.id}
+                onClick={function() { p.checkedIn ? onCheckIn(p.id, false) : (setSelId(p.id), setPaid(false)); }}
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                  background: p.checkedIn ? 'transparent' : '#0d1218',
+                  border: '1px solid ' + (p.checkedIn ? 'var(--line)' : '#2a3340'),
+                  borderRadius: 10, padding: '12px 14px', cursor: 'pointer', textAlign: 'left',
+                  opacity: p.checkedIn ? 0.55 : 1,
+                }}
+              >
+                <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif" }}>
+                  {p.regular === true && <span style={{ color: '#fbbf24', marginRight: 5 }}>★</span>}{p.name}
+                </span>
+                {p.checkedIn
+                  ? <span style={{ fontSize: 11, color: 'var(--dim)', fontFamily: "'Noto Sans TC', sans-serif" }}>已報到</span>
+                  : <span style={{ fontSize: 13, color: accent, fontWeight: 700, fontFamily: "'Noto Sans TC', sans-serif" }}>報到 →</span>}
+              </button>
+            );
+          })}
+        </div>
+        <button onClick={onSkip} style={{
+          width: '100%', background: 'transparent', color: 'var(--muted)',
+          border: '1px solid var(--line)', borderRadius: 10, padding: '11px',
+          fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+        }}>只看排點，不加入</button>
+      </div>
+    </div>
+  );
+}
+
+function JoinScreen({ onJoin, onSkip, theme, accent, role, players, onCheckIn }) {
   const [name, setName] = React.useState('');
   const inputRef = React.useRef(null);
   const isPlayer = role === 'player';
+
+  // 球員模式：改用「從名單挑選報到」流程
+  if (isPlayer) {
+    return <PlayerCheckInScreen players={players} accent={accent} onCheckIn={onCheckIn} onSkip={onSkip} />;
+  }
 
   React.useEffect(() => {
     inputRef.current && inputRef.current.focus();
@@ -2287,8 +2466,9 @@ function App() {
         });
       });
 
+      // 只有「已報到」的球員能進入排點候選（未報到者不參與）
       var availablePool = updatedPlayers.filter(function(p) {
-        return !otherCourtIds.has(p.id);
+        return !otherCourtIds.has(p.id) && p.checkedIn;
       });
 
       var pMap = {};
@@ -2335,8 +2515,9 @@ function App() {
     if (role !== 'admin') return;
     if (!confirm('確定要重設？所有資料將清除。')) return;
 
+    // 重設＝新的一場：保留★固定班底，但所有人都要重新報到／繳費
     var kept = players.filter(function(p) { return p.regular; }).map(function(p) {
-      return Object.assign({}, p, { games: 0, consecutiveGames: 0, partners: {}, opponents: {} });
+      return Object.assign({}, p, { games: 0, consecutiveGames: 0, partners: {}, opponents: {}, checkedIn: false, paid: false });
     });
 
     var newCourts = [{ teamA: [], teamB: [] }, { teamA: [], teamB: [] }];
@@ -2350,7 +2531,8 @@ function App() {
 
   // ── 球員管理 ──────────────────────────────────────────────────────────────
   function handleAddPlayer(name, level, pinned) {
-    var newP = window.normalizePlayer({ id: 'p-' + Date.now(), name: name, level: level, games: 0, pinned: !!pinned, regular: pinned === true });
+    // 手動即時新增的球員視為已到場（checkedIn:true），繳費留給管理者另外標記
+    var newP = window.normalizePlayer({ id: 'p-' + Date.now(), name: name, level: level, games: 0, pinned: !!pinned, regular: pinned === true, checkedIn: true, paid: false });
     var next = players.concat([newP]);
     setPlayers(next);
     saveToStorage(next, courts, roundNumbers);
@@ -2390,6 +2572,27 @@ function App() {
     savePlayers(next);
   }
 
+  // 報到／取消報到（在場上時不允許取消，避免把上場中的人踢出排點狀態）
+  function handleToggleCheckIn(pid) {
+    var p = players.find(function(x) { return x.id === pid; });
+    if (!p) return;
+    var nowIn = !p.checkedIn;
+    if (!nowIn && onCourtIds.has(pid)) {
+      alert('該球員正在場上，請先讓其下場再取消報到。');
+      return;
+    }
+    var next = players.map(function(x) { return x.id === pid ? Object.assign({}, x, { checkedIn: nowIn }) : x; });
+    setPlayers(next);
+    savePlayers(next);
+  }
+
+  // 繳費／取消繳費（獨立狀態，不影響排點）
+  function handleTogglePaid(pid) {
+    var next = players.map(function(x) { return x.id === pid ? Object.assign({}, x, { paid: !x.paid }) : x; });
+    setPlayers(next);
+    savePlayers(next);
+  }
+
   function handleDeletePlayer(pid) {
     if (onCourtIds.has(pid)) {
       alert('無法刪除上場中的球員，請先等對局結束。');
@@ -2425,6 +2628,25 @@ function App() {
   }
 
   function handleSkip() { setJoined(true); }
+
+  // 球員自助報到：從名單挑選自己的 id → 標記報到（可選同時繳費）→ 設為 me
+  function handlePlayerCheckIn(pid, markPaid) {
+    fbGet('/players').then(function(current) {
+      var pArr = Array.isArray(current) ? current.map(window.normalizePlayer) : players;
+      var found = pArr.find(function(p) { return p.id === pid; });
+      if (!found) { pArr = players; found = players.find(function(p) { return p.id === pid; }); }
+      var next = pArr.map(function(p) {
+        return p.id === pid ? Object.assign({}, p, { checkedIn: true, paid: markPaid ? true : p.paid }) : p;
+      });
+      setPlayers(next);
+      setMeId(pid);
+      if (found && found.name) sessionStorage.setItem('badminton_myName', found.name);
+      fbPut('/players', next).then(function() { setJoined(true); });
+    }).catch(function() {
+      var next = players.map(function(p) { return p.id === pid ? Object.assign({}, p, { checkedIn: true, paid: markPaid ? true : p.paid }) : p; });
+      setPlayers(next); setMeId(pid); setJoined(true);
+    });
+  }
 
   // ── Drag & Drop ───────────────────────────────────────────────────────────
   React.useEffect(function() {
@@ -2525,7 +2747,7 @@ function App() {
   if (!joined) {
     return (
       <React.Fragment>
-        <JoinScreen onJoin={handleJoin} onSkip={handleSkip} theme={tweaks.theme} accent={tweaks.accent} role={role} />
+        <JoinScreen onJoin={handleJoin} onSkip={handleSkip} theme={tweaks.theme} accent={tweaks.accent} role={role} players={players} onCheckIn={handlePlayerCheckIn} />
         <TweaksPanel state={tweaks} onChange={updateTweaks} show={showTweaks} />
       </React.Fragment>
     );
@@ -2610,6 +2832,8 @@ function App() {
           onImportPlayers={handleImportPlayers}
           onDeletePlayer={handleDeletePlayer}
           onTogglePin={handleTogglePin}
+          onToggleCheckIn={handleToggleCheckIn}
+          onTogglePaid={handleTogglePaid}
           isPortrait={isPortrait}
         />
       </div>
