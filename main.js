@@ -6,9 +6,9 @@
 const DEFAULT_PLAYERS = [];
 
 const DEFAULT_EVENT = {
-  day: 'WED',
-  time: '19:30–22:00',
-  location: '松山羽球館',
+  day: 'TUE',
+  time: '20:00–22:00',
+  location: '南科新力羽球館',
 };
 
 window.DEFAULT_PLAYERS = DEFAULT_PLAYERS;
@@ -1340,7 +1340,7 @@ function JoinScreen({ onJoin, onSkip, theme, accent, role }) {
               fontSize: 10, color: 'var(--dim)', marginTop: 2,
               fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1,
             }}>
-              WEDNESDAY · 19:30–22:00 · 松山羽球館
+              星期二 · 20:00–22:00 · 南科新力羽球館
             </div>
           </div>
         </div>
