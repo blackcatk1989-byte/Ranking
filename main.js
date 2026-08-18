@@ -542,7 +542,7 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
             fontFamily: "'JetBrains Mono', monospace",
             fontSize: 10, color: 'var(--muted)',
             letterSpacing: 1.5, fontWeight: 700,
-          }}>COURT {String(index + 1).padStart(2, '0')}</div>
+          }}>{index + 7}號場</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
             <span style={{
               fontSize: 10, color: 'var(--dim)',
@@ -2149,7 +2149,7 @@ function MessageComposer({ accent, myName, onSend, onClose }) {
             <textarea
               value={text} onChange={function(e) { setText(e.target.value); }}
               autoFocus rows={4} maxLength={300}
-              placeholder="想跟主辦說什麼？例如：我晚 20 分鐘到 / 今天要請假 / 想換到 2 號場…"
+              placeholder="想跟主辦說什麼？"
               style={{
                 background: '#0c1016', border: '1.5px solid #2a3340', borderRadius: 9,
                 padding: '10px 12px', color: '#fff', fontSize: 15, outline: 'none',
@@ -2235,7 +2235,10 @@ function MessagesPanel({ accent, messages, onClear, onClose }) {
 var FIREBASE_URL = 'https://badmintion-ranking-default-rtdb.asia-southeast1.firebasedatabase.app/badminton';
 
 function fbGet(path) {
-  return fetch(FIREBASE_URL + path + '.json')
+  // 帶上管理者 token（若已登入），讓需要認證的讀取也能成功
+  var token = window.__AUTH_TOKEN__;
+  var url = FIREBASE_URL + path + '.json' + (token ? '?auth=' + token : '');
+  return fetch(url)
     .then(function(r) { return r.ok ? r.json() : null; })
     .catch(function() { return null; });
 }
