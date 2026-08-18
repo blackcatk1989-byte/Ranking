@@ -874,8 +874,8 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
       borderTop: isPortrait ? '1px solid var(--line)' : 'none',
       display: 'flex', flexDirection: 'column',
       height: '100%', minHeight: 0,
-      // 直向：填滿場地橫幅下方的剩餘空間，名單在內部自己捲動
-      flex: isPortrait ? '1 1 0' : 'none',
+      // 直向：佔下方 60%（場地 40% / 名單 60%），名單在內部自己捲動
+      flex: isPortrait ? '6 1 0' : 'none',
     }}>
       {/* Header */}
       <div style={{
@@ -2367,20 +2367,6 @@ function App() {
     return function() { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on); };
   }, []);
 
-  // 用 JS 的 window.innerHeight 當容器高度：iOS Safari 橫向的 dvh 常在旋轉後算錯
-  // 而出現黑邊，innerHeight 一律回傳當前真實可見高度、跨瀏覽器最可靠。
-  var [vpH, setVpH] = React.useState(function() {
-    return typeof window !== 'undefined' ? window.innerHeight : 0;
-  });
-  React.useEffect(function() {
-    var on = function() { setVpH(window.innerHeight); };
-    window.addEventListener('resize', on);
-    window.addEventListener('orientationchange', on);
-    return function() {
-      window.removeEventListener('resize', on);
-      window.removeEventListener('orientationchange', on);
-    };
-  }, []);
 
   // ── 啟動時從 Firebase 載入資料 ───────────────────────────────────────────
   React.useEffect(function() {
@@ -2839,10 +2825,9 @@ function App() {
 
   return (
     <div style={{
-      // 固定為當前可見高度：場地常駐上方、名單在下方自己捲動（不再整頁捲動）。
-      // 用 JS innerHeight 而非 100dvh，避免 iOS Safari 橫向旋轉後 dvh 算錯出現黑邊。
-      height: vpH > 0 ? vpH + 'px' : '100dvh',
-      width: '100vw',
+      // 用 position:fixed 直接貼滿可見視窗，完全不依賴 vh/dvh/innerHeight，
+      // 徹底避開 iOS Safari 橫向把高度算錯（黑邊 / 版面壓扁）的問題。
+      position: 'fixed', inset: 0,
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
       background: tweaks.theme === 'minimal'
@@ -2865,10 +2850,10 @@ function App() {
         minHeight: 0, minWidth: 0,
       }}>
         <main style={{
-          // 直向：固定高度的「場地橫幅」，並排、常駐可見、不隨名單捲動
+          // 直向：場地橫幅佔上方 40%（flex 比例，不用 vh），並排、常駐可見
           width: isPortrait ? '100%' : '70%',
-          height: isPortrait ? (vpH > 0 ? Math.round(vpH * 0.4) + 'px' : '40dvh') : '100%',
-          flex: isPortrait ? '0 0 auto' : 'none',
+          height: isPortrait ? 'auto' : '100%',
+          flex: isPortrait ? '4 1 0' : 'none',
           minWidth: 0, minHeight: 0,
           padding: isPortrait ? '10px 10px 4px' : '16px 18px',
           display: 'flex',
