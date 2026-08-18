@@ -2354,12 +2354,15 @@ function App() {
   var [joined, setJoined] = React.useState(role !== 'player' ? true : null);
 
   var [qrOpen, setQROpen] = React.useState(false);
+  // isPortrait 其實是「compact 堆疊版面」開關：直向手機/平板，或「矮螢幕」(手機橫向 <480px)。
+  // 加 max-height:480px 是為了讓手機橫向也用堆疊版面（平板橫向高度 768px+ 不受影響）。
+  var COMPACT_MQ = '(max-width: 1180px) and (orientation: portrait), (max-height: 480px)';
   var [isPortrait, setIsPortrait] = React.useState(function() {
-    return typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px) and (orientation: portrait)').matches;
+    return typeof window !== 'undefined' && window.matchMedia(COMPACT_MQ).matches;
   });
 
   React.useEffect(function() {
-    var mq = window.matchMedia('(max-width: 1180px) and (orientation: portrait)');
+    var mq = window.matchMedia(COMPACT_MQ);
     var on = function() { setIsPortrait(mq.matches); };
     mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on);
     return function() { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on); };

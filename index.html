@@ -73,8 +73,9 @@
     white-space: nowrap;
   }
 
-  /* 直向（手機 + 平板）：與 main.js 的 isPortrait 判斷保持一致 */
-  @media (max-width: 1180px) and (orientation: portrait) {
+  /* compact 堆疊版面（與 main.js 的 isPortrait 判斷保持一致）：
+     直向手機/平板，或矮螢幕（手機橫向 <480px）。平板橫向(高 768px+)不受影響。 */
+  @media (max-width: 1180px) and (orientation: portrait), (max-height: 480px) {
     html, body { overflow: auto; }
     #root { height: 100dvh; }
   }
