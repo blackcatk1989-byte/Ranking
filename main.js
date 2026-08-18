@@ -866,7 +866,9 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
   return (
     <aside style={{
       width: isPortrait ? '100%' : '30%',
-      minWidth: isPortrait ? 0 : 280,
+      // 不設 minWidth：手機橫向若側欄有最小寬度會讓 70%+側欄超出螢幕、
+      // 右側場次數被 overflow:hidden 裁掉。平板 30% 本來就夠寬，不受影響。
+      minWidth: 0,
       background: theme === 'minimal' ? '#131820' : '#1a2029',
       borderLeft: isPortrait ? 'none' : '1px solid var(--line)',
       borderTop: isPortrait ? '1px solid var(--line)' : 'none',
@@ -2365,6 +2367,21 @@ function App() {
     return function() { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on); };
   }, []);
 
+  // 用 JS 的 window.innerHeight 當容器高度：iOS Safari 橫向的 dvh 常在旋轉後算錯
+  // 而出現黑邊，innerHeight 一律回傳當前真實可見高度、跨瀏覽器最可靠。
+  var [vpH, setVpH] = React.useState(function() {
+    return typeof window !== 'undefined' ? window.innerHeight : 0;
+  });
+  React.useEffect(function() {
+    var on = function() { setVpH(window.innerHeight); };
+    window.addEventListener('resize', on);
+    window.addEventListener('orientationchange', on);
+    return function() {
+      window.removeEventListener('resize', on);
+      window.removeEventListener('orientationchange', on);
+    };
+  }, []);
+
   // ── 啟動時從 Firebase 載入資料 ───────────────────────────────────────────
   React.useEffect(function() {
     loadData().then(function(data) {
@@ -2822,8 +2839,9 @@ function App() {
 
   return (
     <div style={{
-      // 直向也用固定 100dvh：場地常駐上方、名單在下方自己捲動（不再整頁捲動）
-      height: '100dvh',
+      // 固定為當前可見高度：場地常駐上方、名單在下方自己捲動（不再整頁捲動）。
+      // 用 JS innerHeight 而非 100dvh，避免 iOS Safari 橫向旋轉後 dvh 算錯出現黑邊。
+      height: vpH > 0 ? vpH + 'px' : '100dvh',
       width: '100vw',
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
@@ -2849,7 +2867,7 @@ function App() {
         <main style={{
           // 直向：固定高度的「場地橫幅」，並排、常駐可見、不隨名單捲動
           width: isPortrait ? '100%' : '70%',
-          height: isPortrait ? '40dvh' : '100%',
+          height: isPortrait ? (vpH > 0 ? Math.round(vpH * 0.4) + 'px' : '40dvh') : '100%',
           flex: isPortrait ? '0 0 auto' : 'none',
           minWidth: 0, minHeight: 0,
           padding: isPortrait ? '10px 10px 4px' : '16px 18px',
