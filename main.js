@@ -952,7 +952,7 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
           flex: 1, minHeight: 0,
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
-          padding: '8px 10px',
+          padding: '8px 10px 84px',
           transition: 'background 160ms',
           background: dragOverBench ? `${accent}08` : 'transparent',
         }}
@@ -1729,11 +1729,6 @@ function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
             );
           })}
         </div>
-        <button onClick={onSkip} style={{
-          width: '100%', background: 'transparent', color: 'var(--muted)',
-          border: '1px solid var(--line)', borderRadius: 10, padding: '11px',
-          fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
-        }}>只看排點，不加入</button>
       </div>
     </div>
   );
@@ -2121,6 +2116,120 @@ function QRDialog({ url, onClose, accent }) {
 window.QRDialog = QRDialog;
 
 // ════════════════════════════════════════════════════════════════════════════
+// 訊息：球員撰寫（Composer）／管理者收件匣（Panel）
+// ════════════════════════════════════════════════════════════════════════════
+function MessageComposer({ accent, myName, onSend, onClose }) {
+  const [text, setText] = React.useState('');
+  const [sent, setSent] = React.useState(false);
+  function submit() {
+    var t = text.trim();
+    if (!t || sent) return;
+    onSend(t);
+    setSent(true);
+    setTimeout(onClose, 1000);
+  }
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={function(e) { e.stopPropagation(); }} style={{
+        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
+        padding: '24px 24px 20px', width: 420, maxWidth: '94vw',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 14,
+      }}>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>MESSAGE 傳訊息給主辦</div>
+        {sent ? (
+          <div style={{ padding: '18px 0', textAlign: 'center', fontSize: 16, fontWeight: 700, color: accent, fontFamily: "'Noto Sans TC', sans-serif" }}>已送出 ✓</div>
+        ) : (
+          <React.Fragment>
+            <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: "'Noto Sans TC', sans-serif" }}>
+              以 <span style={{ color: 'var(--text)', fontWeight: 700 }}>{myName || '匿名'}</span> 的名義傳給主辦
+            </div>
+            <textarea
+              value={text} onChange={function(e) { setText(e.target.value); }}
+              autoFocus rows={4} maxLength={300}
+              placeholder="想跟主辦說什麼？例如：我晚 20 分鐘到 / 今天要請假 / 想換到 2 號場…"
+              style={{
+                background: '#0c1016', border: '1.5px solid #2a3340', borderRadius: 9,
+                padding: '10px 12px', color: '#fff', fontSize: 15, outline: 'none',
+                fontFamily: "'Noto Sans TC', sans-serif", lineHeight: 1.5, width: '100%', resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{
+                background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
+                borderRadius: 8, padding: '8px 18px', fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+              }}>取消</button>
+              <button onClick={submit} disabled={!text.trim()} style={{
+                background: text.trim() ? accent : `${accent}55`, border: 'none', color: '#0a1a10',
+                borderRadius: 8, padding: '8px 22px', fontSize: 13, fontWeight: 800,
+                cursor: text.trim() ? 'pointer' : 'not-allowed', fontFamily: "'Noto Sans TC', sans-serif",
+              }}>送出</button>
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MessagesPanel({ accent, messages, onClear, onClose }) {
+  function fmt(t) {
+    if (!t) return '';
+    var d = new Date(t);
+    var p = function(n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={function(e) { e.stopPropagation(); }} style={{
+        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
+        padding: '22px 22px 18px', width: 460, maxWidth: '94vw', maxHeight: '86vh',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>
+            INBOX 球員訊息 · {messages.length}
+          </div>
+          {messages.length > 0 && (
+            <button onClick={onClear} style={{
+              background: 'transparent', border: '1px solid #f8717166', color: '#f87171',
+              borderRadius: 7, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+              fontFamily: "'Noto Sans TC', sans-serif",
+            }}>清除全部</button>
+          )}
+        </div>
+        <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
+          {messages.length === 0 ? (
+            <div style={{ color: 'var(--dim)', fontSize: 13, textAlign: 'center', padding: '24px 0', fontFamily: "'Noto Sans TC', sans-serif" }}>目前沒有訊息</div>
+          ) : messages.map(function(m) {
+            return (
+              <div key={m.id} style={{
+                background: '#0d1218', border: '1px solid #2a3340', borderRadius: 10, padding: '10px 12px',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: accent, fontFamily: "'Noto Sans TC', sans-serif" }}>{m.name}</span>
+                  <span style={{ fontSize: 10, color: 'var(--dim)', fontFamily: "'JetBrains Mono', monospace" }}>{fmt(m.time)}</span>
+                </div>
+                <div style={{ fontSize: 14, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif", lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.text}</div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onClose} style={{
+          background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
+          borderRadius: 8, padding: '9px', fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+        }}>關閉</button>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // Firebase 資料層
 // ════════════════════════════════════════════════════════════════════════════
 var FIREBASE_URL = 'https://badmintion-ranking-default-rtdb.asia-southeast1.firebasedatabase.app/badminton';
@@ -2152,6 +2261,23 @@ function saveCurrentMatch(match) {
   fbPut('/currentMatch', match);
   fbPut('/court1', c1);
   fbPut('/court2', c2);
+}
+
+// ── 球員 → 主辦 訊息 ────────────────────────────────────────────────────────
+// 每則訊息寫成 /messages 下的獨立子節點，避免多人同時送互相覆蓋
+function sendPlayerMessage(name, text) {
+  var id = 'm-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+  return fbPut('/messages/' + id, {
+    name: name || '匿名', text: String(text).slice(0, 300), time: Date.now(),
+  });
+}
+function clearMessages() { return fbPut('/messages', null); }
+function messagesToArray(obj) {
+  if (!obj || typeof obj !== 'object') return [];
+  return Object.keys(obj).map(function(k) {
+    var m = obj[k] || {};
+    return { id: k, name: m.name || '匿名', text: m.text || '', time: m.time || 0 };
+  }).sort(function(a, b) { return b.time - a.time; });
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -2356,6 +2482,13 @@ function App() {
   var [joined, setJoined] = React.useState(role !== 'player' ? true : null);
 
   var [qrOpen, setQROpen] = React.useState(false);
+
+  // 訊息：球員撰寫 / 管理者收件匣
+  var [msgOpen, setMsgOpen] = React.useState(false);
+  var [messages, setMessages] = React.useState([]);
+  var [lastSeenMsg, setLastSeenMsg] = React.useState(function() {
+    return typeof localStorage !== 'undefined' ? (+localStorage.getItem('badminton_lastSeenMsg') || 0) : 0;
+  });
   var [isPortrait, setIsPortrait] = React.useState(function() {
     return typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px) and (orientation: portrait)').matches;
   });
@@ -2444,14 +2577,19 @@ function App() {
     return s;
   }, [courts]);
 
-  // ── 管理者模式：每 3 秒讀取 /players 更新名單 ────────────────────────────
+  // ── 管理者模式：每 3 秒讀取 /players 更新名單，並收球員訊息 ────────────────
   React.useEffect(function() {
     if (role !== 'admin') return;
-    var interval = setInterval(function() {
+    function tick() {
       fbGet('/players').then(function(data) {
         if (Array.isArray(data)) setPlayers(data.map(window.normalizePlayer));
       });
-    }, 3000);
+      fbGet('/messages').then(function(data) {
+        setMessages(messagesToArray(data));
+      });
+    }
+    tick();
+    var interval = setInterval(tick, 3000);
     return function() { clearInterval(interval); };
   }, [role]);
 
@@ -2699,6 +2837,28 @@ function App() {
 
   function handleSkip() { setJoined(true); }
 
+  // ── 訊息 handlers ─────────────────────────────────────────────────────────
+  var myName = React.useMemo(function() {
+    var me = players.find(function(p) { return p.id === meId; });
+    if (me && me.name) return me.name;
+    try { return sessionStorage.getItem('badminton_myName') || ''; } catch (e) { return ''; }
+  }, [players, meId]);
+
+  var unreadCount = React.useMemo(function() {
+    return messages.filter(function(m) { return m.time > lastSeenMsg; }).length;
+  }, [messages, lastSeenMsg]);
+
+  function handleSendMessage(text) { sendPlayerMessage(myName, text); }
+  function handleClearMessages() { clearMessages(); setMessages([]); }
+  function openMessages() {
+    if (role === 'admin') {
+      var now = Date.now();
+      setLastSeenMsg(now);
+      try { localStorage.setItem('badminton_lastSeenMsg', String(now)); } catch (e) {}
+    }
+    setMsgOpen(true);
+  }
+
   // 球員自助報到：從名單挑選自己的 id → 標記報到（可選同時繳費）→ 設為 me
   function handlePlayerCheckIn(pid, markPaid) {
     fbGet('/players').then(function(current) {
@@ -2912,6 +3072,39 @@ function App() {
       <TweaksPanel state={tweaks} onChange={updateTweaks} show={showTweaks} />
 
       {qrOpen && <QRDialog url={playerUrl} onClose={function() { setQROpen(false); }} accent={tweaks.accent} />}
+
+      {/* 浮動訊息鈕：球員＝傳訊給主辦；管理者＝收件匣(未讀紅點) */}
+      <button
+        onClick={openMessages}
+        title={role === 'admin' ? '球員訊息' : '傳訊息給主辦'}
+        style={{
+          position: 'fixed', right: 16, bottom: 16, zIndex: 150,
+          width: 54, height: 54, borderRadius: '50%',
+          background: tweaks.accent, color: '#0a1a10', border: 'none',
+          fontSize: 24, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.5)',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >
+        {role === 'admin' ? '📬' : '💬'}
+        {role === 'admin' && unreadCount > 0 && (
+          <span style={{
+            position: 'absolute', top: -4, right: -4, minWidth: 20, height: 20,
+            padding: '0 5px', borderRadius: 10, background: '#f87171', color: '#fff',
+            fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center',
+            justifyContent: 'center', fontFamily: "'JetBrains Mono', monospace",
+            border: '2px solid #0c1016',
+          }}>{unreadCount > 99 ? '99+' : unreadCount}</span>
+        )}
+      </button>
+
+      {msgOpen && role === 'admin' && (
+        <MessagesPanel accent={tweaks.accent} messages={messages}
+          onClear={handleClearMessages} onClose={function() { setMsgOpen(false); }} />
+      )}
+      {msgOpen && role !== 'admin' && (
+        <MessageComposer accent={tweaks.accent} myName={myName}
+          onSend={handleSendMessage} onClose={function() { setMsgOpen(false); }} />
+      )}
 
       <style>{`
         @keyframes fadeIn {
