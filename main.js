@@ -559,7 +559,7 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <button
               onClick={onCall}
-              title="通知本場球員上場（震動/提示音）"
+              title="預備通知：告訴這組下一場換他們（手機提示）"
               style={{
                 background: 'transparent', border: `1px solid ${accent}66`,
                 color: accent, padding: compact ? '6px 9px' : '6px 10px', borderRadius: 7,
@@ -572,7 +572,7 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
               onMouseUp={e => e.currentTarget.style.transform = ''}
               onMouseLeave={e => e.currentTarget.style.transform = ''}
             >
-              <span style={{ fontSize: 13, lineHeight: 1 }}>⚡</span>{compact ? '' : '上場通知'}
+              <span style={{ fontSize: 13, lineHeight: 1 }}>⚡</span>{compact ? '' : '預備'}
             </button>
             <button
               onClick={onNext} disabled={animating}
@@ -2325,6 +2325,38 @@ function playCallBeep() {
     });
   } catch (e) {}
 }
+
+// 叮咚兩聲（叫號前引起注意）
+function playDingDong() {
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    var ctx = window.__audioCtx || (window.__audioCtx = new AC());
+    if (ctx.state === 'suspended') ctx.resume();
+    [[988, 0], [660, 0.28]].forEach(function(pair) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'sine'; o.frequency.value = pair[0];
+      o.connect(g); g.connect(ctx.destination);
+      var t0 = ctx.currentTime + pair[1];
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.26);
+      o.start(t0); o.stop(t0 + 0.28);
+    });
+  } catch (e) {}
+}
+
+// 語音唸出上場名單（從按按鈕的那台裝置發聲）
+function speakLineup(courtNum, names) {
+  try {
+    if (!window.speechSynthesis || !names || !names.length) return;
+    var text = courtNum + '號場，' + names.join('、') + '，上場';
+    var u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-TW'; u.rate = 0.95; u.pitch = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(u);
+  } catch (e) {}
+}
 var __titleTimer = null, __titleOrig = null;
 function stopTitleFlash() {
   if (__titleTimer) { clearInterval(__titleTimer); __titleTimer = null; }
@@ -2559,9 +2591,11 @@ function App() {
     return typeof localStorage !== 'undefined' ? (+localStorage.getItem('badminton_lastSeenMsg') || 0) : 0;
   });
 
-  // 上場通知（球員端）：alertCourt = 要跳出提示的場地 index；callSeenRef 記錄各場已處理過的時間戳
-  var [alertCourt, setAlertCourt] = React.useState(null);
+  // 上場通知（球員端）：alertInfo = { court, kind:'go'|'ready' } 或 null；callSeenRef 記錄各場已處理過的時間戳
+  var [alertInfo, setAlertInfo] = React.useState(null);
   var callSeenRef = React.useRef({ init: false, seen: {} });
+  // 每場「重設後是否已按過第一次下一場」→ 第一次靜音（第一組手動拉、不叫號）
+  var announcedOnceRef = React.useRef([false, false]);
   var [isPortrait, setIsPortrait] = React.useState(function() {
     return typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px) and (orientation: portrait)').matches;
   });
@@ -2677,7 +2711,7 @@ function App() {
         fbGet('/court1'),
         fbGet('/court2'),
         fbGet('/roundNumbers'),
-        fbGet('/callToCourt'),
+        fbGet('/callUp'),
       ]).then(function(res) {
         var pArr = Array.isArray(res[0]) ? res[0].map(window.normalizePlayer) : [];
         var pMap = {};
@@ -2694,23 +2728,24 @@ function App() {
         setCourts([toCourtObj(res[1]), toCourtObj(res[2])]);
         if (Array.isArray(res[3])) setRoundNumbers(res[3]);
 
-        // ── 上場通知偵測 ──
-        var cc = res[4] || {};
-        function ccVal(i) { var v = (cc[i] != null ? cc[i] : cc[String(i)]); return v || 0; }
-        function inCourt(c) { return c && ((c.team1 || []).indexOf(meId) >= 0 || (c.team2 || []).indexOf(meId) >= 0); }
-        var myCourt = inCourt(res[1]) ? 0 : (inCourt(res[2]) ? 1 : -1);
+        // ── 上場 / 預備通知偵測（/callUp 每場一則 {kind, ids, court, time}，比對 id）──
+        var cu = res[4] || {};
         var st = callSeenRef.current;
-        if (!st.init) {
-          st.seen[0] = ccVal(0); st.seen[1] = ccVal(1); st.init = true;
-        } else {
-          if (myCourt >= 0 && ccVal(myCourt) > (st.seen[myCourt] || 0)) {
-            setAlertCourt(myCourt);
-            try { if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]); } catch (e) {}
+        Object.keys(cu).forEach(function(k) {
+          var e = cu[k];
+          if (!e || !e.time) return;
+          var isNew = e.time > (st.seen[k] || 0);
+          st.seen[k] = e.time;
+          if (!st.init || !isNew) return;
+          if (meId && Array.isArray(e.ids) && e.ids.indexOf(meId) >= 0) {
+            var courtIdx = (e.court != null) ? e.court : parseInt(k, 10) || 0;
+            setAlertInfo({ court: courtIdx, kind: e.kind === 'ready' ? 'ready' : 'go' });
+            try { if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]); } catch (err) {}
             playCallBeep();
-            flashTitle('⚡ 該你上場了！');
+            flashTitle(e.kind === 'ready' ? '⚡ 下一場準備！' : '⚡ 該你上場了！');
           }
-          st.seen[0] = ccVal(0); st.seen[1] = ccVal(1);
-        }
+        });
+        st.init = true;
       });
     }
 
@@ -2739,16 +2774,41 @@ function App() {
     };
   }, [role]);
 
-  // ── 「下一場」：各球場獨立排程 ──────────────────────────────────────────
-  // 上場通知：寫入該場的時間戳，球員端輪詢比對後跳出上場提示
-  function handleCallToCourt(courtIdx) {
-    if (role !== 'admin') return;
-    fbPut('/callToCourt/' + courtIdx, Date.now());
+  // 目前顯示在某場的球員（teamA+teamB）
+  function courtLineup(courtIdx) {
+    var c = courts[courtIdx] || { teamA: [], teamB: [] };
+    return (c.teamA || []).concat(c.teamB || []).filter(Boolean);
   }
 
+  // ⚡ 預備通知：告訴「目前顯示這組」下一場就是他們（手機提示，不出語音）
+  function handleCallReady(courtIdx) {
+    if (role !== 'admin') return;
+    var lineup = courtLineup(courtIdx);
+    if (lineup.length === 0) return;
+    fbPut('/callUp/' + courtIdx, {
+      kind: 'ready', court: courtIdx, time: Date.now(),
+      ids: lineup.map(function(p) { return p.id; }),
+    });
+  }
+
+  // ── 「下一場」：叫號（叮咚+語音+手機）＋ 排出下一組 ──────────────────────
   function handleNextCourt(courtIdx) {
     if (role !== 'admin') return;
     if (animatingCourts[courtIdx]) return;
+
+    // 叫號：喊出「按下前顯示的這組」。每場重設後第一次靜音（第一組手動拉、不叫）。
+    var lineup = courtLineup(courtIdx);
+    var firstTime = !announcedOnceRef.current[courtIdx];
+    announcedOnceRef.current[courtIdx] = true;
+    if (!firstTime && lineup.length > 0) {
+      playDingDong();
+      var names = lineup.map(function(p) { return p.name; });
+      setTimeout(function() { speakLineup(courtIdx + 7, names); }, 620); // 叮咚後再唸
+      fbPut('/callUp/' + courtIdx, {
+        kind: 'go', court: courtIdx, time: Date.now(),
+        ids: lineup.map(function(p) { return p.id; }),
+      });
+    }
 
     setAnimatingCourts(function(prev) {
       var next = prev.slice(); next[courtIdx] = true; return next;
@@ -2854,6 +2914,9 @@ function App() {
     setCourts(newCourts);
     setRoundNumbers(newRoundNumbers);
     setAnimKeys([0, 0]);
+    // 新的一場：每場第一次按下一場重新靜音；清掉舊的叫號通知
+    announcedOnceRef.current = [false, false];
+    fbPut('/callUp', null);
   }
 
   // ── 球員管理 ──────────────────────────────────────────────────────────────
@@ -3162,7 +3225,7 @@ function App() {
                   accent={tweaks.accent}
                   round={roundNumbers[i]}
                   onNext={function() { handleNextCourt(i); }}
-                  onCall={function() { handleCallToCourt(i); }}
+                  onCall={function() { handleCallReady(i); }}
                   compact={isPortrait}
                   animating={animatingCourts[i]}
                   role={role}
@@ -3227,29 +3290,30 @@ function App() {
           onSend={handleSendMessage} onClose={function() { setMsgOpen(false); }} />
       )}
 
-      {/* 上場通知：球員收到後跳出的大提示 */}
-      {alertCourt != null && (
+      {/* 上場 / 預備通知：球員收到後跳出的大提示 */}
+      {alertInfo != null && (
         <div
-          onClick={function() { setAlertCourt(null); stopTitleFlash(); }}
+          onClick={function() { setAlertInfo(null); stopTitleFlash(); }}
           style={{
             position: 'fixed', inset: 0, zIndex: 300,
             background: 'rgba(0,0,0,0.82)',
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            padding: 24, gap: 20, textAlign: 'center',
+            padding: 24, gap: 18, textAlign: 'center',
             animation: 'fadeIn 220ms ease both',
           }}
         >
-          <div style={{ fontSize: 72, lineHeight: 1 }}>⚡</div>
+          <div style={{ fontSize: 72, lineHeight: 1 }}>{alertInfo.kind === 'ready' ? '⏳' : '⚡'}</div>
           <div style={{
-            fontSize: 30, fontWeight: 900, color: tweaks.accent,
+            fontSize: 30, fontWeight: 900,
+            color: alertInfo.kind === 'ready' ? '#fbbf24' : tweaks.accent,
             fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: 1,
-          }}>該你上場了！</div>
+          }}>{alertInfo.kind === 'ready' ? '下一場換你，準備！' : '該你上場了！'}</div>
           <div style={{
             fontSize: 40, fontWeight: 900, color: '#fff',
             fontFamily: "'JetBrains Mono','Noto Sans TC', monospace",
-          }}>{alertCourt + 7} 號場</div>
+          }}>{alertInfo.court + 7} 號場</div>
           <button
-            onClick={function() { setAlertCourt(null); stopTitleFlash(); }}
+            onClick={function() { setAlertInfo(null); stopTitleFlash(); }}
             style={{
               marginTop: 8, background: tweaks.accent, color: '#0a1a10', border: 'none',
               borderRadius: 12, padding: '14px 40px', fontSize: 17, fontWeight: 800,
