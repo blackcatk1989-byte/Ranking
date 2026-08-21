@@ -207,8 +207,8 @@ window.pickNextLineup = function(players) {
   return {
     courts: result.courts.map(function(c) {
       return {
-        teamA: c.team1.map(function(id) { return pMap[id]; }).filter(Boolean),
-        teamB: c.team2.map(function(id) { return pMap[id]; }).filter(Boolean),
+        teamA: (c.team1 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
+        teamB: (c.team2 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
       };
     }),
   };
@@ -2531,8 +2531,8 @@ function App() {
   function resultToCourts(result, pMap) {
     return result.courts.map(function(c) {
       return {
-        teamA: c.team1.map(function(id) { return pMap[id]; }).filter(Boolean),
-        teamB: c.team2.map(function(id) { return pMap[id]; }).filter(Boolean),
+        teamA: (c.team1 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
+        teamB: (c.team2 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
       };
     });
   }
@@ -2589,6 +2589,7 @@ function App() {
 
       if (data && data.currentMatch && Array.isArray(data.currentMatch.courts)) {
         var loadedCourts = data.currentMatch.courts.map(function(c) {
+          c = c || {}; // Firebase 陣列可能有 null 洞，先補成空物件避免崩潰
           return {
             teamA: (c.team1 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
             teamB: (c.team2 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
@@ -2804,10 +2805,10 @@ function App() {
 
       var newCourtData;
       if (result.courts.length > 0) {
-        var c = result.courts[0];
+        var c = result.courts[0] || {};
         newCourtData = {
-          teamA: c.team1.map(function(id) { return pMap[id]; }).filter(Boolean),
-          teamB: c.team2.map(function(id) { return pMap[id]; }).filter(Boolean),
+          teamA: (c.team1 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
+          teamB: (c.team2 || []).map(function(id) { return pMap[id]; }).filter(Boolean),
         };
       } else {
         newCourtData = { teamA: [], teamB: [] };
