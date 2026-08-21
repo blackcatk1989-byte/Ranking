@@ -521,7 +521,7 @@ window.useDragSource = function(makeSrc, enabled, label) {
 // ════════════════════════════════════════════════════════════════════════════
 
 // 直式羽球場 - 支援 role (admin/player)
-function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNext, animating, role }) {
+function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNext, onCall, animating, role, compact }) {
   const isAdmin = role === 'admin';
   const courtColor = theme === 'minimal' ? '#1a2029' : '#0f5a36';
   const courtDark = theme === 'minimal' ? '#151a22' : '#0a4428';
@@ -556,26 +556,45 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
           </div>
         </div>
         {isAdmin ? (
-          <button
-            onClick={onNext} disabled={animating}
-            style={{
-              background: animating ? `${accent}55` : accent,
-              border: 'none', color: '#0a1a10',
-              padding: '6px 14px', borderRadius: 7,
-              fontSize: 11, fontWeight: 800,
-              cursor: animating ? 'wait' : 'pointer',
-              fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: 1,
-              display: 'inline-flex', alignItems: 'center', gap: 6,
-              boxShadow: animating ? 'none' : `0 3px 10px ${accent}55`,
-              transition: 'transform 120ms',
-            }}
-            onMouseDown={e => !animating && (e.currentTarget.style.transform = 'scale(0.97)')}
-            onMouseUp={e => e.currentTarget.style.transform = ''}
-            onMouseLeave={e => e.currentTarget.style.transform = ''}
-          >
-            {animating ? '排點中' : '下一場'}
-            {!animating && <span style={{fontSize:13,lineHeight:1}}>→</span>}
-          </button>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <button
+              onClick={onCall}
+              title="通知本場球員上場（震動/提示音）"
+              style={{
+                background: 'transparent', border: `1px solid ${accent}66`,
+                color: accent, padding: compact ? '6px 9px' : '6px 10px', borderRadius: 7,
+                fontSize: 12, fontWeight: 800, cursor: 'pointer',
+                fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: compact ? 0 : 1,
+                display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap',
+                transition: 'transform 120ms',
+              }}
+              onMouseDown={e => (e.currentTarget.style.transform = 'scale(0.97)')}
+              onMouseUp={e => e.currentTarget.style.transform = ''}
+              onMouseLeave={e => e.currentTarget.style.transform = ''}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>⚡</span>{compact ? '' : '上場通知'}
+            </button>
+            <button
+              onClick={onNext} disabled={animating}
+              style={{
+                background: animating ? `${accent}55` : accent,
+                border: 'none', color: '#0a1a10',
+                padding: '6px 14px', borderRadius: 7,
+                fontSize: 11, fontWeight: 800,
+                cursor: animating ? 'wait' : 'pointer',
+                fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: 1,
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                boxShadow: animating ? 'none' : `0 3px 10px ${accent}55`,
+                transition: 'transform 120ms',
+              }}
+              onMouseDown={e => !animating && (e.currentTarget.style.transform = 'scale(0.97)')}
+              onMouseUp={e => e.currentTarget.style.transform = ''}
+              onMouseLeave={e => e.currentTarget.style.transform = ''}
+            >
+              {animating ? '排點中' : '下一場'}
+              {!animating && <span style={{fontSize:13,lineHeight:1}}>→</span>}
+            </button>
+          </div>
         ) : (
           <div style={{
             fontSize: 10, color: 'var(--dim)',
@@ -689,6 +708,7 @@ function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
       style={{
         width: '100%', height: '100%', minHeight: 60,
         borderRadius: 12,
+        containerType: 'inline-size', // 讓名字用 cqw 隨格子大小自動縮放
         touchAction: 'manipulation',
         WebkitUserSelect: 'none',
         WebkitTouchCallout: 'none',
@@ -714,8 +734,11 @@ function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
         }}>ME</div>
       )}
       <div style={{
-        fontWeight: 700, fontSize: 15, letterSpacing: 0.5,
-        lineHeight: 1.1, textAlign: 'center',
+        fontWeight: 800,
+        // 隨格子寬度縮放：平板大場地約放大一倍(上限 32px)，手機小場地維持不破版(下限 15px)
+        fontSize: 'clamp(15px, 24cqw, 30px)',
+        letterSpacing: 0.5, lineHeight: 1.05, textAlign: 'center',
+        maxWidth: '100%', overflowWrap: 'anywhere', wordBreak: 'break-word',
         fontFamily: "'Noto Sans TC', 'Inter', sans-serif",
       }}>{player.name}</div>
     </div>
@@ -2283,6 +2306,49 @@ function messagesToArray(obj) {
   }).sort(function(a, b) { return b.time - a.time; });
 }
 
+// ── 上場通知：提示音（Web Audio）＋ 分頁標題閃爍 ─────────────────────────────
+function playCallBeep() {
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    var ctx = window.__audioCtx || (window.__audioCtx = new AC());
+    if (ctx.state === 'suspended') ctx.resume();
+    [0, 0.2, 0.4].forEach(function(delay) {
+      var o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'square'; o.frequency.value = 880;
+      o.connect(g); g.connect(ctx.destination);
+      var t0 = ctx.currentTime + delay;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
+      o.start(t0); o.stop(t0 + 0.18);
+    });
+  } catch (e) {}
+}
+var __titleTimer = null, __titleOrig = null;
+function stopTitleFlash() {
+  if (__titleTimer) { clearInterval(__titleTimer); __titleTimer = null; }
+  if (__titleOrig != null) { try { document.title = __titleOrig; } catch (e) {} __titleOrig = null; }
+}
+function flashTitle(msg) {
+  try {
+    stopTitleFlash();
+    __titleOrig = document.title;
+    var on = false, n = 0;
+    __titleTimer = setInterval(function() {
+      document.title = on ? __titleOrig : msg; on = !on; n++;
+      if (n > 24) stopTitleFlash();
+    }, 700);
+    var vis = function() {
+      if (document.visibilityState === 'visible') {
+        stopTitleFlash();
+        document.removeEventListener('visibilitychange', vis);
+      }
+    };
+    document.addEventListener('visibilitychange', vis);
+  } catch (e) {}
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // PasswordOverlay
 // ════════════════════════════════════════════════════════════════════════════
@@ -2492,6 +2558,10 @@ function App() {
   var [lastSeenMsg, setLastSeenMsg] = React.useState(function() {
     return typeof localStorage !== 'undefined' ? (+localStorage.getItem('badminton_lastSeenMsg') || 0) : 0;
   });
+
+  // 上場通知（球員端）：alertCourt = 要跳出提示的場地 index；callSeenRef 記錄各場已處理過的時間戳
+  var [alertCourt, setAlertCourt] = React.useState(null);
+  var callSeenRef = React.useRef({ init: false, seen: {} });
   var [isPortrait, setIsPortrait] = React.useState(function() {
     return typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px) and (orientation: portrait)').matches;
   });
@@ -2606,6 +2676,7 @@ function App() {
         fbGet('/court1'),
         fbGet('/court2'),
         fbGet('/roundNumbers'),
+        fbGet('/callToCourt'),
       ]).then(function(res) {
         var pArr = Array.isArray(res[0]) ? res[0].map(window.normalizePlayer) : [];
         var pMap = {};
@@ -2621,15 +2692,59 @@ function App() {
         }
         setCourts([toCourtObj(res[1]), toCourtObj(res[2])]);
         if (Array.isArray(res[3])) setRoundNumbers(res[3]);
+
+        // ── 上場通知偵測 ──
+        var cc = res[4] || {};
+        function ccVal(i) { var v = (cc[i] != null ? cc[i] : cc[String(i)]); return v || 0; }
+        function inCourt(c) { return c && ((c.team1 || []).indexOf(meId) >= 0 || (c.team2 || []).indexOf(meId) >= 0); }
+        var myCourt = inCourt(res[1]) ? 0 : (inCourt(res[2]) ? 1 : -1);
+        var st = callSeenRef.current;
+        if (!st.init) {
+          st.seen[0] = ccVal(0); st.seen[1] = ccVal(1); st.init = true;
+        } else {
+          if (myCourt >= 0 && ccVal(myCourt) > (st.seen[myCourt] || 0)) {
+            setAlertCourt(myCourt);
+            try { if (navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 300]); } catch (e) {}
+            playCallBeep();
+            flashTitle('⚡ 該你上場了！');
+          }
+          st.seen[0] = ccVal(0); st.seen[1] = ccVal(1);
+        }
       });
     }
 
     poll();
     var interval = setInterval(poll, 2000);
     return function() { clearInterval(interval); };
-  }, [role, joined]);
+  }, [role, joined, meId]);
+
+  // ── 球員：第一次觸控/點擊時解鎖 AudioContext，讓上場提示音之後能播放 ──────
+  React.useEffect(function() {
+    if (role !== 'player') return;
+    function unlock() {
+      try {
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if (AC && !window.__audioCtx) window.__audioCtx = new AC();
+        if (window.__audioCtx && window.__audioCtx.state === 'suspended') window.__audioCtx.resume();
+      } catch (e) {}
+      window.removeEventListener('touchend', unlock);
+      window.removeEventListener('click', unlock);
+    }
+    window.addEventListener('touchend', unlock);
+    window.addEventListener('click', unlock);
+    return function() {
+      window.removeEventListener('touchend', unlock);
+      window.removeEventListener('click', unlock);
+    };
+  }, [role]);
 
   // ── 「下一場」：各球場獨立排程 ──────────────────────────────────────────
+  // 上場通知：寫入該場的時間戳，球員端輪詢比對後跳出上場提示
+  function handleCallToCourt(courtIdx) {
+    if (role !== 'admin') return;
+    fbPut('/callToCourt/' + courtIdx, Date.now());
+  }
+
   function handleNextCourt(courtIdx) {
     if (role !== 'admin') return;
     if (animatingCourts[courtIdx]) return;
@@ -3046,6 +3161,8 @@ function App() {
                   accent={tweaks.accent}
                   round={roundNumbers[i]}
                   onNext={function() { handleNextCourt(i); }}
+                  onCall={function() { handleCallToCourt(i); }}
+                  compact={isPortrait}
                   animating={animatingCourts[i]}
                   role={role}
                 />
@@ -3107,6 +3224,39 @@ function App() {
       {msgOpen && role !== 'admin' && (
         <MessageComposer accent={tweaks.accent} myName={myName}
           onSend={handleSendMessage} onClose={function() { setMsgOpen(false); }} />
+      )}
+
+      {/* 上場通知：球員收到後跳出的大提示 */}
+      {alertCourt != null && (
+        <div
+          onClick={function() { setAlertCourt(null); stopTitleFlash(); }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 300,
+            background: 'rgba(0,0,0,0.82)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            padding: 24, gap: 20, textAlign: 'center',
+            animation: 'fadeIn 220ms ease both',
+          }}
+        >
+          <div style={{ fontSize: 72, lineHeight: 1 }}>⚡</div>
+          <div style={{
+            fontSize: 30, fontWeight: 900, color: tweaks.accent,
+            fontFamily: "'Noto Sans TC', sans-serif", letterSpacing: 1,
+          }}>該你上場了！</div>
+          <div style={{
+            fontSize: 40, fontWeight: 900, color: '#fff',
+            fontFamily: "'JetBrains Mono','Noto Sans TC', monospace",
+          }}>{alertCourt + 7} 號場</div>
+          <button
+            onClick={function() { setAlertCourt(null); stopTitleFlash(); }}
+            style={{
+              marginTop: 8, background: tweaks.accent, color: '#0a1a10', border: 'none',
+              borderRadius: 12, padding: '14px 40px', fontSize: 17, fontWeight: 800,
+              cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+              boxShadow: `0 10px 28px ${tweaks.accent}66`,
+            }}
+          >知道了</button>
+        </div>
       )}
 
       <style>{`
