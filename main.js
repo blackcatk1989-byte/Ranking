@@ -559,7 +559,7 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <button
               onClick={onCall}
-              title="預備通知：告訴這組下一場換他們（手機提示）"
+              title="上場通知：叮咚+語音播報這組上場名單(連唸兩次)+通知球員，可重按重播"
               style={{
                 background: 'transparent', border: `1px solid ${accent}66`,
                 color: accent, padding: compact ? '6px 9px' : '6px 10px', borderRadius: 7,
@@ -572,7 +572,7 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
               onMouseUp={e => e.currentTarget.style.transform = ''}
               onMouseLeave={e => e.currentTarget.style.transform = ''}
             >
-              <span style={{ fontSize: 13, lineHeight: 1 }}>⚡</span>{compact ? '' : '預備'}
+              <span style={{ fontSize: 13, lineHeight: 1 }}>⚡</span>{compact ? '' : '上場通知'}
             </button>
             <button
               onClick={onNext} disabled={animating}
@@ -2346,15 +2346,23 @@ function playDingDong() {
   } catch (e) {}
 }
 
-// 語音唸出上場名單（從按按鈕的那台裝置發聲）
-function speakLineup(courtNum, names) {
+// 播報時暫時壓下其他 App 的聲音（iOS 16.4+ 才有 AudioSession；其他平台自動略過）
+function duckOtherAudio() {
+  try { if (navigator.audioSession) navigator.audioSession.type = 'transient-solo'; } catch (e) {}
+}
+
+// 語音唸出上場名單（從按按鈕的那台裝置發聲）；times = 連續唸幾次
+function speakLineup(courtNum, names, times) {
   try {
     if (!window.speechSynthesis || !names || !names.length) return;
+    times = times || 1;
     var text = courtNum + '號場，' + names.join('、') + '，上場';
-    var u = new SpeechSynthesisUtterance(text);
-    u.lang = 'zh-TW'; u.rate = 0.95; u.pitch = 1;
-    window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(u);
+    window.speechSynthesis.cancel(); // 切斷正在唸的，重頭再播
+    for (var i = 0; i < times; i++) {
+      var u = new SpeechSynthesisUtterance(text);
+      u.lang = 'zh-TW'; u.rate = 0.95; u.pitch = 1;
+      window.speechSynthesis.speak(u);
+    }
   } catch (e) {}
 }
 var __titleTimer = null, __titleOrig = null;
@@ -2594,8 +2602,6 @@ function App() {
   // 上場通知（球員端）：alertInfo = { court, kind:'go'|'ready' } 或 null；callSeenRef 記錄各場已處理過的時間戳
   var [alertInfo, setAlertInfo] = React.useState(null);
   var callSeenRef = React.useRef({ init: false, seen: {} });
-  // 每場「重設後是否已按過第一次下一場」→ 第一次靜音（第一組手動拉、不叫號）
-  var announcedOnceRef = React.useRef([false, false]);
   var [isPortrait, setIsPortrait] = React.useState(function() {
     return typeof window !== 'undefined' && window.matchMedia('(max-width: 1180px) and (orientation: portrait)').matches;
   });
@@ -2781,34 +2787,27 @@ function App() {
   }
 
   // ⚡ 預備通知：告訴「目前顯示這組」下一場就是他們（手機提示，不出語音）
-  function handleCallReady(courtIdx) {
+  // ⚡ 上場通知：叮咚 + 語音「X號場,名字,上場」連唸兩次（本機播報，可重按重播切斷重來）
+  //            + 手機通知目前顯示這組「該你上場了」。播報時嘗試壓下其他 App 聲音。
+  function handleCallUp(courtIdx) {
     if (role !== 'admin') return;
     var lineup = courtLineup(courtIdx);
     if (lineup.length === 0) return;
+    duckOtherAudio();
+    try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} // 重按：切斷正在唸的
+    playDingDong();
+    var names = lineup.map(function(p) { return p.name; });
+    setTimeout(function() { speakLineup(courtIdx + 7, names, 2); }, 620); // 叮咚後連唸兩次
     fbPut('/callUp/' + courtIdx, {
-      kind: 'ready', court: courtIdx, time: Date.now(),
+      kind: 'go', court: courtIdx, time: Date.now(),
       ids: lineup.map(function(p) { return p.id; }),
     });
   }
 
-  // ── 「下一場」：叫號（叮咚+語音+手機）＋ 排出下一組 ──────────────────────
+  // ── 「下一場」：單純排出下一組（不出聲；語音改由 ⚡ 上場通知負責）──────────
   function handleNextCourt(courtIdx) {
     if (role !== 'admin') return;
     if (animatingCourts[courtIdx]) return;
-
-    // 叫號：喊出「按下前顯示的這組」。每場重設後第一次靜音（第一組手動拉、不叫）。
-    var lineup = courtLineup(courtIdx);
-    var firstTime = !announcedOnceRef.current[courtIdx];
-    announcedOnceRef.current[courtIdx] = true;
-    if (!firstTime && lineup.length > 0) {
-      playDingDong();
-      var names = lineup.map(function(p) { return p.name; });
-      setTimeout(function() { speakLineup(courtIdx + 7, names); }, 620); // 叮咚後再唸
-      fbPut('/callUp/' + courtIdx, {
-        kind: 'go', court: courtIdx, time: Date.now(),
-        ids: lineup.map(function(p) { return p.id; }),
-      });
-    }
 
     setAnimatingCourts(function(prev) {
       var next = prev.slice(); next[courtIdx] = true; return next;
@@ -2914,8 +2913,7 @@ function App() {
     setCourts(newCourts);
     setRoundNumbers(newRoundNumbers);
     setAnimKeys([0, 0]);
-    // 新的一場：每場第一次按下一場重新靜音；清掉舊的叫號通知
-    announcedOnceRef.current = [false, false];
+    // 新的一場：清掉舊的叫號通知
     fbPut('/callUp', null);
   }
 
@@ -3225,7 +3223,7 @@ function App() {
                   accent={tweaks.accent}
                   round={roundNumbers[i]}
                   onNext={function() { handleNextCourt(i); }}
-                  onCall={function() { handleCallReady(i); }}
+                  onCall={function() { handleCallUp(i); }}
                   compact={isPortrait}
                   animating={animatingCourts[i]}
                   role={role}
