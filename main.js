@@ -2346,24 +2346,50 @@ function playDingDong() {
   } catch (e) {}
 }
 
-// 播報時暫時壓下其他 App 的聲音（iOS 16.4+ 才有 AudioSession；其他平台自動略過）
-function duckOtherAudio() {
-  try { if (navigator.audioSession) navigator.audioSession.type = 'transient-solo'; } catch (e) {}
+// 播報時壓低其他 App 音量（iOS 16.4+ AudioSession；其他平台自動略過）。
+// 關鍵：TTS 不走音訊工作階段，故在整段播報期間額外播一個幾乎聽不到的低頻音，
+// 把工作階段「撐住」，Spotify 才會在整段唸名字期間都被壓低，唸完才恢復。
+var __duckOsc = null, __duckGain = null, __duckGen = 0;
+function startDuck() {
+  __duckGen++;
+  try { if (navigator.audioSession) navigator.audioSession.type = 'transient'; } catch (e) {}
+  try {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    var ctx = window.__audioCtx || (window.__audioCtx = new AC());
+    if (ctx.state === 'suspended') ctx.resume();
+    stopDuck(true); // 先收掉舊的維持音（重按時）
+    __duckOsc = ctx.createOscillator();
+    __duckGain = ctx.createGain();
+    __duckGain.gain.value = 0.0008; // 幾乎聽不到，只為維持音訊工作階段
+    __duckOsc.type = 'sine'; __duckOsc.frequency.value = 60;
+    __duckOsc.connect(__duckGain); __duckGain.connect(ctx.destination);
+    __duckOsc.start();
+  } catch (e) {}
+}
+function stopDuck(keepSession) {
+  try { if (__duckOsc) { __duckOsc.stop(); __duckOsc.disconnect(); } } catch (e) {}
+  try { if (__duckGain) __duckGain.disconnect(); } catch (e) {}
+  __duckOsc = null; __duckGain = null;
+  if (!keepSession) {
+    try { if (navigator.audioSession) navigator.audioSession.type = 'auto'; } catch (e) {}
+  }
 }
 
-// 語音唸出上場名單（從按按鈕的那台裝置發聲）；times = 連續唸幾次
-function speakLineup(courtNum, names, times) {
+// 語音唸出上場名單；times = 連續唸幾次；onDone = 全部唸完後的 callback
+function speakLineup(courtNum, names, times, onDone) {
   try {
-    if (!window.speechSynthesis || !names || !names.length) return;
+    if (!window.speechSynthesis || !names || !names.length) { if (onDone) onDone(); return; }
     times = times || 1;
     var text = courtNum + '號場，' + names.join('、') + '，上場';
     window.speechSynthesis.cancel(); // 切斷正在唸的，重頭再播
     for (var i = 0; i < times; i++) {
       var u = new SpeechSynthesisUtterance(text);
       u.lang = 'zh-TW'; u.rate = 0.95; u.pitch = 1;
+      if (i === times - 1 && onDone) { u.onend = onDone; u.onerror = onDone; }
       window.speechSynthesis.speak(u);
     }
-  } catch (e) {}
+  } catch (e) { if (onDone) onDone(); }
 }
 var __titleTimer = null, __titleOrig = null;
 function stopTitleFlash() {
@@ -2793,11 +2819,16 @@ function App() {
     if (role !== 'admin') return;
     var lineup = courtLineup(courtIdx);
     if (lineup.length === 0) return;
-    duckOtherAudio();
     try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) {} // 重按：切斷正在唸的
+    startDuck();                 // 開始壓低其他 App 音量，整段播報期間維持
+    var myGen = __duckGen;
     playDingDong();
     var names = lineup.map(function(p) { return p.name; });
-    setTimeout(function() { speakLineup(courtIdx + 7, names, 2); }, 620); // 叮咚後連唸兩次
+    setTimeout(function() {
+      speakLineup(courtIdx + 7, names, 2, function() { if (myGen === __duckGen) stopDuck(); }); // 唸完解除壓音
+    }, 620);
+    // 保險：15 秒內若沒正常收尾就強制解除（且只解除自己這一輪的）
+    setTimeout(function() { if (myGen === __duckGen) stopDuck(); }, 15000);
     fbPut('/callUp/' + courtIdx, {
       kind: 'go', court: courtIdx, time: Date.now(),
       ids: lineup.map(function(p) { return p.id; }),
