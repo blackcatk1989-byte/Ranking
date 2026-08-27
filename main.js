@@ -2352,7 +2352,10 @@ function playDingDong() {
 var __duckOsc = null, __duckGain = null, __duckGen = 0;
 function startDuck() {
   __duckGen++;
-  try { if (navigator.audioSession) navigator.audioSession.type = 'transient'; } catch (e) {}
+  // 只有支援 AudioSession 的裝置（iOS 16.4+）能壓低其他 App 音量；
+  // Android 沒有對應 API（系統限制，網頁無法控制其他 App），直接略過。
+  if (!navigator.audioSession) return;
+  try { navigator.audioSession.type = 'transient'; } catch (e) {}
   try {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
