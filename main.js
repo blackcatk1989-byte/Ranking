@@ -2326,22 +2326,27 @@ function playCallBeep() {
   } catch (e) {}
 }
 
-// 叮咚兩聲（叫號前引起注意）
+// 叮咚（叫號前引起注意）—— 加大音量、用 triangle 更有存在感，
+// 經限幅器(compressor)推大而不破音，較容易蓋過背景音樂。
 function playDingDong() {
   try {
     var AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     var ctx = window.__audioCtx || (window.__audioCtx = new AC());
     if (ctx.state === 'suspended') ctx.resume();
-    [[988, 0], [660, 0.28]].forEach(function(pair) {
+    var comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -6; comp.ratio.value = 12;
+    comp.attack.value = 0.003; comp.release.value = 0.25;
+    comp.connect(ctx.destination);
+    [[988, 0], [660, 0.30]].forEach(function(pair) {
       var o = ctx.createOscillator(), g = ctx.createGain();
-      o.type = 'sine'; o.frequency.value = pair[0];
-      o.connect(g); g.connect(ctx.destination);
+      o.type = 'triangle'; o.frequency.value = pair[0];
+      o.connect(g); g.connect(comp);
       var t0 = ctx.currentTime + pair[1];
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(0.4, t0 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.26);
-      o.start(t0); o.stop(t0 + 0.28);
+      g.gain.exponentialRampToValueAtTime(0.98, t0 + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.34);
+      o.start(t0); o.stop(t0 + 0.36);
     });
   } catch (e) {}
 }
@@ -2388,7 +2393,7 @@ function speakLineup(courtNum, names, times, onDone) {
     window.speechSynthesis.cancel(); // 切斷正在唸的，重頭再播
     for (var i = 0; i < times; i++) {
       var u = new SpeechSynthesisUtterance(text);
-      u.lang = 'zh-TW'; u.rate = 0.95; u.pitch = 1;
+      u.lang = 'zh-TW'; u.rate = 0.9; u.pitch = 1; u.volume = 1; // 最大音量、放慢一點更清楚
       if (i === times - 1 && onDone) { u.onend = onDone; u.onerror = onDone; }
       window.speechSynthesis.speak(u);
     }
@@ -2829,7 +2834,7 @@ function App() {
     var names = lineup.map(function(p) { return p.name; });
     setTimeout(function() {
       speakLineup(courtIdx + 7, names, 2, function() { if (myGen === __duckGen) stopDuck(); }); // 唸完解除壓音
-    }, 620);
+    }, 750);
     // 保險：15 秒內若沒正常收尾就強制解除（且只解除自己這一輪的）
     setTimeout(function() { if (myGen === __duckGen) stopDuck(); }, 15000);
     fbPut('/callUp/' + courtIdx, {
