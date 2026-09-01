@@ -24,7 +24,8 @@ window.normalizePlayer = function(p) {
   // paid：是否已繳費（獨立記錄，不影響排點；季繳球員不適用）
   // regular（★）：常客/保留，重整時不消失
   // seasonPass（季）：季繳身分＝固定班底、免繳費，重整時也保留
-  return Object.assign({ games: 0, consecutiveGames: 0, partners: {}, opponents: {}, pinned: true, regular: true, checkedIn: false, paid: false, seasonPass: false }, p);
+  // wantPartner / wantOppo：球員偏好（想同隊 / 想對面的球員 id 陣列），重設時清空
+  return Object.assign({ games: 0, consecutiveGames: 0, partners: {}, opponents: {}, pinned: true, regular: true, checkedIn: false, paid: false, seasonPass: false, wantPartner: [], wantOppo: [] }, p);
 };
 
 // 臨打名單批次解析：把貼上的多行文字轉成一串姓名。
@@ -61,7 +62,9 @@ window.SCHED_WEIGHTS = {
   LEVEL:   20,   // 實力差²。舊值 100 太高，會壓死其他考量
   FAIR:    60,   // 出場數總和（見下方 calcScore）。拉高後「大家輪流上場」優先
   PARTNER: 10,   // 重複隊友。舊值 3，拉高後比較不會一直同一組
-  CONSEC:  40    // 連續出賽懲罰（新增）。剛打完的人不會馬上又被排上
+  CONSEC:  40,   // 連續出賽懲罰（新增）。剛打完的人不會馬上又被排上
+  PREF:    6     // 偏好搭配（想同隊/想對面）。刻意小：只當平手時的加分項，
+                 // 單向給一半、雙向給全部；絕不會壓過公平/實力/連打等考量
 };
 
 window.scheduleNextRound = function(players, options) {
@@ -108,6 +111,24 @@ window.scheduleNextRound = function(players, options) {
       [ca[0], ca[1]].forEach(function(t) {
         if (t.length >= 2) s += ((t[0].partners || {})[t[1].id] || 0) * W.PARTNER;
       });
+    });
+
+    // 偏好搭配（軟性、小權重）：滿足就減分（分數越低越好）。單向給一半、雙向給全部。
+    function wants(a, b, key) { return a && Array.isArray(a[key]) && a[key].indexOf(b.id) >= 0; }
+    function prefBonus(a, b, key) {
+      var w1 = wants(a, b, key), w2 = wants(b, a, key);
+      return w1 && w2 ? W.PREF : (w1 || w2 ? W.PREF / 2 : 0);
+    }
+    courtAssigns.forEach(function(ca) {
+      var t1 = ca[0], t2 = ca[1];
+      // 想同隊：同一隊內兩兩配對
+      [t1, t2].forEach(function(t) {
+        for (var i = 0; i < t.length; i++) for (var j = i + 1; j < t.length; j++) {
+          s -= prefBonus(t[i], t[j], 'wantPartner');
+        }
+      });
+      // 想對面：t1 每人 vs t2 每人
+      t1.forEach(function(a) { t2.forEach(function(b) { s -= prefBonus(a, b, 'wantOppo'); }); });
     });
     return s;
   }
@@ -2139,6 +2160,98 @@ function QRDialog({ url, onClose, accent }) {
 window.QRDialog = QRDialog;
 
 // ════════════════════════════════════════════════════════════════════════════
+// 球員偏好搭配：想同隊 / 想對面（多選，寫回自己的紀錄）
+// ════════════════════════════════════════════════════════════════════════════
+function PreferenceDialog({ accent, players, meId, initPartner, initOppo, onSave, onClose }) {
+  const [tab, setTab] = React.useState('partner'); // 'partner' | 'oppo'
+  const [partner, setPartner] = React.useState((initPartner || []).slice());
+  const [oppo, setOppo] = React.useState((initOppo || []).slice());
+  const [saved, setSaved] = React.useState(false);
+
+  const roster = (players || [])
+    .filter(function(p) { return p.id !== meId; })
+    .slice().sort(function(a, b) { return String(a.name).localeCompare(String(b.name), 'zh-Hant'); });
+
+  const cur = tab === 'partner' ? partner : oppo;
+  const setCur = tab === 'partner' ? setPartner : setOppo;
+  function toggle(id) {
+    var has = cur.indexOf(id) >= 0;
+    setCur(has ? cur.filter(function(x) { return x !== id; }) : cur.concat([id]));
+  }
+
+  function save() { onSave(partner, oppo); setSaved(true); setTimeout(onClose, 900); }
+
+  const tabBtn = function(key, label, count) {
+    var on = tab === key;
+    return (
+      <button onClick={function() { setTab(key); }} style={{
+        flex: 1, background: on ? accent : 'transparent',
+        color: on ? '#0a1a10' : 'var(--muted)',
+        border: '1px solid ' + (on ? accent : 'var(--line)'),
+        borderRadius: 8, padding: '8px', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+        fontFamily: "'Noto Sans TC', sans-serif",
+      }}>{label}{count > 0 ? ' · ' + count : ''}</button>
+    );
+  };
+
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={function(e) { e.stopPropagation(); }} style={{
+        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
+        padding: '22px 22px 18px', width: 440, maxWidth: '94vw', maxHeight: '88vh',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>PREFERENCE 偏好搭配</div>
+        {saved ? (
+          <div style={{ padding: '22px 0', textAlign: 'center', fontSize: 16, fontWeight: 700, color: accent, fontFamily: "'Noto Sans TC', sans-serif" }}>已儲存 ✓</div>
+        ) : (
+          <React.Fragment>
+            <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, fontFamily: "'Noto Sans TC', sans-serif" }}>
+              勾選你想同隊 / 想對面的球友。系統排點時會<span style={{ color: 'var(--text)' }}>盡量</span>幫你安排（不保證，仍以公平與實力平均為主）。
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {tabBtn('partner', '想同隊', partner.length)}
+              {tabBtn('oppo', '想對面', oppo.length)}
+            </div>
+            <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 80, maxHeight: '46dvh' }}>
+              {roster.length === 0 ? (
+                <div style={{ color: 'var(--dim)', fontSize: 13, textAlign: 'center', padding: '20px 0', fontFamily: "'Noto Sans TC', sans-serif" }}>名單載入中…</div>
+              ) : roster.map(function(p) {
+                var on = cur.indexOf(p.id) >= 0;
+                return (
+                  <button key={p.id} onClick={function() { toggle(p.id); }} style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                    background: on ? `${accent}18` : '#0d1218',
+                    border: '1px solid ' + (on ? accent + '88' : '#2a3340'),
+                    borderRadius: 10, padding: '11px 14px', cursor: 'pointer', textAlign: 'left',
+                  }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif" }}>{p.name}</span>
+                    <span style={{ fontSize: 15, color: on ? accent : 'var(--dim)', fontWeight: 800 }}>{on ? '✓' : '＋'}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{
+                background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
+                borderRadius: 8, padding: '9px 18px', fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+              }}>取消</button>
+              <button onClick={save} style={{
+                background: accent, border: 'none', color: '#0a1a10', borderRadius: 8,
+                padding: '9px 22px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+              }}>儲存</button>
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // 訊息：球員撰寫（Composer）／管理者收件匣（Panel）
 // ════════════════════════════════════════════════════════════════════════════
 function MessageComposer({ accent, myName, onSend, onClose }) {
@@ -2704,6 +2817,9 @@ function App() {
   var [history, setHistory] = React.useState([]);
   var [historyOpen, setHistoryOpen] = React.useState(false);
 
+  // 球員偏好搭配對話框
+  var [prefOpen, setPrefOpen] = React.useState(false);
+
   // 上場通知（球員端）：alertInfo = { court, kind:'go'|'ready' } 或 null；callSeenRef 記錄各場已處理過的時間戳
   var [alertInfo, setAlertInfo] = React.useState(null);
   var callSeenRef = React.useRef({ init: false, seen: {} });
@@ -3028,7 +3144,7 @@ function App() {
 
     // 重設＝新的一場：保留★常客與季繳球員，但所有人都要重新報到／繳費
     var kept = players.filter(function(p) { return p.regular || p.seasonPass; }).map(function(p) {
-      return Object.assign({}, p, { games: 0, consecutiveGames: 0, partners: {}, opponents: {}, checkedIn: false, paid: false });
+      return Object.assign({}, p, { games: 0, consecutiveGames: 0, partners: {}, opponents: {}, checkedIn: false, paid: false, wantPartner: [], wantOppo: [] });
     });
 
     var newCourts = [{ teamA: [], teamB: [] }, { teamA: [], teamB: [] }];
@@ -3157,6 +3273,19 @@ function App() {
 
   function handleSendMessage(text) { sendPlayerMessage(myName, text); }
   function handleClearMessages() { clearMessages(); setMessages([]); }
+
+  // 球員儲存偏好搭配（想同隊 / 想對面的球員 id 陣列）→ 寫回自己的紀錄
+  function handleSavePreferences(wantPartner, wantOppo) {
+    if (!meId) return;
+    fbGet('/players').then(function(current) {
+      var pArr = Array.isArray(current) ? current.map(window.normalizePlayer) : players;
+      var next = pArr.map(function(p) {
+        return p.id === meId ? Object.assign({}, p, { wantPartner: wantPartner || [], wantOppo: wantOppo || [] }) : p;
+      });
+      setPlayers(next);
+      fbPut('/players', next);
+    }).catch(function() {});
+  }
   function openMessages() {
     if (role === 'admin') {
       var now = Date.now();
@@ -3406,7 +3535,7 @@ function App() {
         )}
       </button>
 
-      {/* 浮動紀錄鈕：管理者查看出場組合（疊在訊息鈕上方）*/}
+      {/* 浮動鈕（疊在訊息鈕上方）：管理者＝出場組合紀錄；球員＝偏好搭配 */}
       {role === 'admin' && (
         <button
           onClick={function() { setHistoryOpen(true); }}
@@ -3420,6 +3549,19 @@ function App() {
           }}
         >📋</button>
       )}
+      {role !== 'admin' && meId && (
+        <button
+          onClick={function() { setPrefOpen(true); }}
+          title="偏好搭配：想同隊 / 想對面"
+          style={{
+            position: 'fixed', right: 16, bottom: 80, zIndex: 150,
+            width: 54, height: 54, borderRadius: '50%',
+            background: '#232b36', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
+            fontSize: 24, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.5)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >🤝</button>
+      )}
 
       {msgOpen && role === 'admin' && (
         <MessagesPanel accent={tweaks.accent} messages={messages}
@@ -3432,6 +3574,14 @@ function App() {
       {historyOpen && role === 'admin' && (
         <HistoryPanel accent={tweaks.accent} history={history}
           onClose={function() { setHistoryOpen(false); }} />
+      )}
+      {prefOpen && role !== 'admin' && meId && (
+        <PreferenceDialog
+          accent={tweaks.accent} players={players} meId={meId}
+          initPartner={(players.find(function(p) { return p.id === meId; }) || {}).wantPartner || []}
+          initOppo={(players.find(function(p) { return p.id === meId; }) || {}).wantOppo || []}
+          onSave={handleSavePreferences}
+          onClose={function() { setPrefOpen(false); }} />
       )}
 
       {/* 上場 / 預備通知：球員收到後跳出的大提示 */}
