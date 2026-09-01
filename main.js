@@ -2252,6 +2252,61 @@ function MessagesPanel({ accent, messages, onClear, onClose }) {
   );
 }
 
+// 出場組合紀錄面板（管理者）
+function HistoryPanel({ accent, history, onClose }) {
+  function fmt(t) {
+    if (!t) return '';
+    var d = new Date(t), p = function(n) { return (n < 10 ? '0' : '') + n; };
+    return p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  return (
+    <div onClick={onClose} style={{
+      position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={function(e) { e.stopPropagation(); }} style={{
+        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
+        padding: '22px 22px 18px', width: 480, maxWidth: '94vw', maxHeight: '86vh',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
+      }}>
+        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>
+          HISTORY 出場組合 · {history.length}
+        </div>
+        <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
+          {history.length === 0 ? (
+            <div style={{ color: 'var(--dim)', fontSize: 13, textAlign: 'center', padding: '24px 0', fontFamily: "'Noto Sans TC', sans-serif" }}>
+              尚無紀錄（按「下一場」後會記下上一組）
+            </div>
+          ) : history.map(function(h) {
+            return (
+              <div key={h.id} style={{
+                background: '#0d1218', border: '1px solid #2a3340', borderRadius: 10, padding: '10px 12px',
+                display: 'flex', flexDirection: 'column', gap: 4,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--muted)', fontFamily: "'JetBrains Mono', monospace", letterSpacing: 0.5 }}>
+                    第 {h.round} 輪 · {h.court + 7}號場
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--dim)', fontFamily: "'JetBrains Mono', monospace" }}>{fmt(h.time)}</span>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif", display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <span style={{ color: accent }}>{(h.teamA || []).join('、') || '—'}</span>
+                  <span style={{ color: 'var(--dim)', fontSize: 12 }}>🆚</span>
+                  <span style={{ color: '#fbbf24' }}>{(h.teamB || []).join('、') || '—'}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <button onClick={onClose} style={{
+          background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
+          borderRadius: 8, padding: '9px', fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+        }}>關閉</button>
+      </div>
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // Firebase 資料層
 // ════════════════════════════════════════════════════════════════════════════
@@ -2303,6 +2358,18 @@ function messagesToArray(obj) {
   return Object.keys(obj).map(function(k) {
     var m = obj[k] || {};
     return { id: k, name: m.name || '匿名', text: m.text || '', time: m.time || 0 };
+  }).sort(function(a, b) { return b.time - a.time; });
+}
+
+// 出場組合紀錄（新→舊）
+function historyToArray(obj) {
+  if (!obj || typeof obj !== 'object') return [];
+  return Object.keys(obj).map(function(k) {
+    var h = obj[k] || {};
+    return {
+      id: k, round: h.round || 0, court: h.court || 0,
+      teamA: h.teamA || [], teamB: h.teamB || [], time: h.time || 0,
+    };
   }).sort(function(a, b) { return b.time - a.time; });
 }
 
@@ -2633,6 +2700,10 @@ function App() {
     return typeof localStorage !== 'undefined' ? (+localStorage.getItem('badminton_lastSeenMsg') || 0) : 0;
   });
 
+  // 出場組合紀錄（管理者）
+  var [history, setHistory] = React.useState([]);
+  var [historyOpen, setHistoryOpen] = React.useState(false);
+
   // 上場通知（球員端）：alertInfo = { court, kind:'go'|'ready' } 或 null；callSeenRef 記錄各場已處理過的時間戳
   var [alertInfo, setAlertInfo] = React.useState(null);
   var callSeenRef = React.useRef({ init: false, seen: {} });
@@ -2734,6 +2805,9 @@ function App() {
       });
       fbGet('/messages').then(function(data) {
         setMessages(messagesToArray(data));
+      });
+      fbGet('/history').then(function(data) {
+        setHistory(historyToArray(data));
       });
     }
     tick();
@@ -2848,6 +2922,18 @@ function App() {
     if (role !== 'admin') return;
     if (animatingCourts[courtIdx]) return;
 
+    // 出場組合紀錄：記下「排新組合前」顯示的這組（最後微調結果），供事後查看
+    var recCourt = courts[courtIdx] || { teamA: [], teamB: [] };
+    var recA = (recCourt.teamA || []).filter(Boolean).map(function(p) { return p.name; });
+    var recB = (recCourt.teamB || []).filter(Boolean).map(function(p) { return p.name; });
+    if (recA.length || recB.length) {
+      var hid = 'h-' + Date.now() + '-' + courtIdx;
+      fbPut('/history/' + hid, {
+        round: roundNumbers[courtIdx], court: courtIdx,
+        teamA: recA, teamB: recB, time: Date.now(),
+      });
+    }
+
     setAnimatingCourts(function(prev) {
       var next = prev.slice(); next[courtIdx] = true; return next;
     });
@@ -2952,8 +3038,10 @@ function App() {
     setCourts(newCourts);
     setRoundNumbers(newRoundNumbers);
     setAnimKeys([0, 0]);
-    // 新的一場：清掉舊的叫號通知
+    // 新的一場：清掉舊的叫號通知與出場組合紀錄
     fbPut('/callUp', null);
+    fbPut('/history', null);
+    setHistory([]);
   }
 
   // ── 球員管理 ──────────────────────────────────────────────────────────────
@@ -3318,6 +3406,21 @@ function App() {
         )}
       </button>
 
+      {/* 浮動紀錄鈕：管理者查看出場組合（疊在訊息鈕上方）*/}
+      {role === 'admin' && (
+        <button
+          onClick={function() { setHistoryOpen(true); }}
+          title="出場組合紀錄"
+          style={{
+            position: 'fixed', right: 16, bottom: 80, zIndex: 150,
+            width: 54, height: 54, borderRadius: '50%',
+            background: '#232b36', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
+            fontSize: 24, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.5)',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          }}
+        >📋</button>
+      )}
+
       {msgOpen && role === 'admin' && (
         <MessagesPanel accent={tweaks.accent} messages={messages}
           onClear={handleClearMessages} onClose={function() { setMsgOpen(false); }} />
@@ -3325,6 +3428,10 @@ function App() {
       {msgOpen && role !== 'admin' && (
         <MessageComposer accent={tweaks.accent} myName={myName}
           onSend={handleSendMessage} onClose={function() { setMsgOpen(false); }} />
+      )}
+      {historyOpen && role === 'admin' && (
+        <HistoryPanel accent={tweaks.accent} history={history}
+          onClose={function() { setHistoryOpen(false); }} />
       )}
 
       {/* 上場 / 預備通知：球員收到後跳出的大提示 */}
