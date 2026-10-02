@@ -1047,8 +1047,8 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
       {addOpen && isAdmin && (
         <AddPlayerDialog
           accent={accent}
-          onAdd={function(name, level, pinned) {
-            onAddPlayer(name, level, pinned);
+          onAdd={function(name, level, pinned, season) {
+            onAddPlayer(name, level, pinned, season);
             setAddOpen(false);
           }}
           onCancel={function() { setAddOpen(false); }}
@@ -1085,6 +1085,7 @@ function AddPlayerDialog({ accent, onAdd, onCancel }) {
   const [name, setName] = React.useState('');
   const [level, setLevel] = React.useState(6);
   const [regular, setRegular] = React.useState(false);
+  const [season, setSeason] = React.useState(false);
   const inputRef = React.useRef(null);
 
   React.useEffect(function() {
@@ -1094,7 +1095,7 @@ function AddPlayerDialog({ accent, onAdd, onCancel }) {
   function handleSubmit() {
     var trimmed = name.trim();
     if (!trimmed) return;
-    onAdd(trimmed, level, regular);
+    onAdd(trimmed, level, regular, season);
   }
 
   return (
@@ -1189,6 +1190,24 @@ function AddPlayerDialog({ accent, onAdd, onCancel }) {
             fontFamily: "'Noto Sans TC', sans-serif",
             transition: 'color 120ms',
           }}>★ 固定班底</span>
+        </label>
+
+        {/* Season-pass checkbox（勾選＝季繳，免繳費、重整保留；順便點亮★） */}
+        <label style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          cursor: 'pointer', userSelect: 'none',
+        }}>
+          <input
+            type="checkbox"
+            checked={season}
+            onChange={function(e) { setSeason(e.target.checked); if (e.target.checked) setRegular(true); }}
+            style={{ accentColor: '#34d399', width: 16, height: 16 }}
+          />
+          <span style={{
+            fontSize: 13, color: season ? '#34d399' : 'var(--muted)',
+            fontFamily: "'Noto Sans TC', sans-serif",
+            transition: 'color 120ms',
+          }}>季繳球員（免繳費）</span>
         </label>
 
         {/* Buttons */}
@@ -3161,9 +3180,10 @@ function App() {
   }
 
   // ── 球員管理 ──────────────────────────────────────────────────────────────
-  function handleAddPlayer(name, level, pinned) {
+  function handleAddPlayer(name, level, pinned, season) {
     // 手動即時新增的球員視為已到場（checkedIn:true），繳費留給管理者另外標記
-    var newP = window.normalizePlayer({ id: 'p-' + Date.now(), name: name, level: level, games: 0, pinned: !!pinned, regular: pinned === true, checkedIn: true, paid: false });
+    // 季繳＝固定班底，故勾季繳時 regular 也一併為 true
+    var newP = window.normalizePlayer({ id: 'p-' + Date.now(), name: name, level: level, games: 0, pinned: !!pinned, regular: pinned === true || season === true, checkedIn: true, paid: false, seasonPass: season === true });
     var next = players.concat([newP]);
     setPlayers(next);
     saveToStorage(next, courts, roundNumbers);
