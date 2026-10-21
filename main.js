@@ -3179,6 +3179,16 @@ function App() {
     setHistory([]);
   }
 
+  // ── 左右兩場互換：把兩個場地的整組人對調（場次輪數仍跟著實體場地，不動）──────
+  function handleSwapCourts() {
+    if (role !== 'admin') return;
+    if (!courts || courts.length < 2) return;
+    if (animatingCourts[0] || animatingCourts[1]) return;
+    var next = [courts[1], courts[0]];
+    setCourts(next);
+    saveToStorage(players, next, roundNumbers);
+  }
+
   // ── 球員管理 ──────────────────────────────────────────────────────────────
   function handleAddPlayer(name, level, pinned, season) {
     // 手動即時新增的球員視為已到場（checkedIn:true），繳費留給管理者另外標記
@@ -3530,6 +3540,24 @@ function App() {
       <TweaksPanel state={tweaks} onChange={updateTweaks} show={showTweaks} />
 
       {qrOpen && <QRDialog url={playerUrl} onClose={function() { setQROpen(false); }} accent={tweaks.accent} />}
+
+      {/* 左右兩場互換鈕（管理者，左下）*/}
+      {role === 'admin' && (
+        <button
+          onClick={handleSwapCourts}
+          title="左右兩場互換（兩場的人對調）"
+          style={{
+            position: 'fixed', left: 16, bottom: 16, zIndex: 150,
+            height: 54, padding: '0 18px', borderRadius: 27,
+            background: '#232b36', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
+            fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.5)',
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            fontFamily: "'Noto Sans TC', sans-serif",
+          }}
+        >
+          <span style={{ fontSize: 18, lineHeight: 1 }}>⇄</span>互換兩場
+        </button>
+      )}
 
       {/* 浮動訊息鈕：球員＝傳訊給主辦；管理者＝收件匣(未讀紅點) */}
       <button
