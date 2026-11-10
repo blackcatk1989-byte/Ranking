@@ -2566,7 +2566,7 @@ function HistoryPanel({ accent, history, onClose }) {
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif", display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={{ color: accent }}>{names(h.teamA, h.gamesA)}</span>
                   <span style={{ color: 'var(--dim)', fontSize: 12 }}>🆚</span>
-                  <span style={{ color: '#fbbf24' }}>{names(h.teamB, h.gamesB)}</span>
+                  <span style={{ color: 'var(--text)' }}>{names(h.teamB, h.gamesB)}</span>
                 </div>
               </div>
             );
