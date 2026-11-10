@@ -25,6 +25,33 @@
     --active: #8ff3b5;
     --me: #eab308;
     --accent: #8ff3b5;
+    /* main.js 內原本寫死的中性色，統一改用下列變數，才能一鍵切換色調 */
+    --c-deep: #0c1016;
+    --c-input: #0d1218;
+    --c-grad: #1a2533;
+    --c-court2: #151a22;
+    --c-line2: #3a4555;
+    --c-line3: #4a5566;
+    --c-soft: #c0c7d0;
+  }
+  /* 溫暖色調（深咖啡底 + 奶油字 + 琥珀強調色）。由 main.js 設 <html data-palette="warm"> 啟用 */
+  :root[data-palette="warm"]{
+    --bg: #211a16;
+    --bg-2: #2b221d;
+    --bg-3: #3a2e27;
+    --line: #4b3c31;
+    --text: #f5ece1;
+    --muted: #bba999;
+    --dim: #8c7a6b;
+    --active: #f2b56b;
+    --accent: #f2b56b;
+    --c-deep: #181310;
+    --c-input: #1d1714;
+    --c-grad: #36291f;
+    --c-court2: #251d18;
+    --c-line2: #5f4d40;
+    --c-line3: #776251;
+    --c-soft: #dccdbe;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter','Noto Sans TC',-apple-system,sans-serif;height:100%;overflow:hidden;-webkit-font-smoothing:antialiased}
@@ -125,6 +152,6 @@
 
   <!-- 模組載入順序。?v= 是版本號：每次更新 main.js 時遞增，讓瀏覽器抓到新版
        （GitHub Pages 會快取 main.js，不加版本號會一直用舊的、需強制重新整理）。 -->
-  <script type="text/babel" data-presets="react" src="main.js?v=20261021-1"></script>
+  <script type="text/babel" data-presets="react" src="main.js?v=20261110-1"></script>
 </body>
 </html>

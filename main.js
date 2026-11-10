@@ -62,9 +62,7 @@ window.SCHED_WEIGHTS = {
   LEVEL:   20,   // 實力差²。舊值 100 太高，會壓死其他考量
   FAIR:    60,   // 出場數總和（見下方 calcScore）。拉高後「大家輪流上場」優先
   PARTNER: 10,   // 重複隊友。舊值 3，拉高後比較不會一直同一組
-  CONSEC:  40,   // 連續出賽懲罰（新增）。剛打完的人不會馬上又被排上
-  PREF:    6     // 偏好搭配（想同隊/想對面）。刻意小：只當平手時的加分項，
-                 // 單向給一半、雙向給全部；絕不會壓過公平/實力/連打等考量
+  CONSEC:  40    // 連續出賽懲罰（新增）。剛打完的人不會馬上又被排上
 };
 
 window.scheduleNextRound = function(players, options) {
@@ -113,23 +111,7 @@ window.scheduleNextRound = function(players, options) {
       });
     });
 
-    // 偏好搭配（軟性、小權重）：滿足就減分（分數越低越好）。單向給一半、雙向給全部。
-    function wants(a, b, key) { return a && Array.isArray(a[key]) && a[key].indexOf(b.id) >= 0; }
-    function prefBonus(a, b, key) {
-      var w1 = wants(a, b, key), w2 = wants(b, a, key);
-      return w1 && w2 ? W.PREF : (w1 || w2 ? W.PREF / 2 : 0);
-    }
-    courtAssigns.forEach(function(ca) {
-      var t1 = ca[0], t2 = ca[1];
-      // 想同隊：同一隊內兩兩配對
-      [t1, t2].forEach(function(t) {
-        for (var i = 0; i < t.length; i++) for (var j = i + 1; j < t.length; j++) {
-          s -= prefBonus(t[i], t[j], 'wantPartner');
-        }
-      });
-      // 想對面：t1 每人 vs t2 每人
-      t1.forEach(function(a) { t2.forEach(function(b) { s -= prefBonus(a, b, 'wantOppo'); }); });
-    });
+    // （舊的「偏好搭配」軟性加權已移除，改為球員「發起挑戰」→ 主辦收件匣一鍵配對）
     return s;
   }
 
@@ -544,9 +526,9 @@ window.useDragSource = function(makeSrc, enabled, label) {
 // 直式羽球場 - 支援 role (admin/player)
 function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNext, onCall, animating, role, compact }) {
   const isAdmin = role === 'admin';
-  const courtColor = theme === 'minimal' ? '#1a2029' : '#0f5a36';
-  const courtDark = theme === 'minimal' ? '#151a22' : '#0a4428';
-  const lineColor = theme === 'minimal' ? '#2a3340' : 'rgba(255,255,255,0.85)';
+  const courtColor = theme === 'minimal' ? 'var(--bg-2)' : '#0f5a36';
+  const courtDark = theme === 'minimal' ? 'var(--c-court2)' : '#0a4428';
+  const lineColor = theme === 'minimal' ? 'var(--line)' : 'rgba(255,255,255,0.85)';
 
   return (
     <div style={{
@@ -650,10 +632,10 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
           position: 'absolute', left: '2%', right: '2%', top: '50%',
           height: 10, transform: 'translateY(-50%)',
           background: theme === 'minimal'
-            ? 'repeating-linear-gradient(90deg, #3a4555 0 2px, transparent 2px 5px)'
+            ? 'repeating-linear-gradient(90deg, var(--c-line2) 0 2px, transparent 2px 5px)'
             : 'repeating-linear-gradient(90deg, rgba(255,255,255,0.85) 0 1.5px, rgba(255,255,255,0.25) 1.5px 4px)',
-          borderTop: theme === 'minimal' ? '1px solid #4a5566' : '2px solid white',
-          borderBottom: theme === 'minimal' ? '1px solid #4a5566' : '2px solid white',
+          borderTop: theme === 'minimal' ? '1px solid var(--c-line3)' : '2px solid white',
+          borderBottom: theme === 'minimal' ? '1px solid var(--c-line3)' : '2px solid white',
           zIndex: 3,
         }} />
 
@@ -773,7 +755,7 @@ window.Court = Court;
 // ════════════════════════════════════════════════════════════════════════════
 
 // 頂部列
-function TopBar({ theme, accent, onReset, onShowQR, onLogout, role, eventInfo }) {
+function TopBar({ theme, accent, onReset, onShowQR, onLogout, role, eventInfo, palette, onTogglePalette }) {
   const isAdmin = role === 'admin';
   const dot = <span style={{ color: 'var(--dim)', fontSize: 11, padding: '0 4px' }}>·</span>;
   const fieldStyle = {
@@ -821,6 +803,18 @@ function TopBar({ theme, accent, onReset, onShowQR, onLogout, role, eventInfo })
         </div>
       </div>
 
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+      {/* 色調切換：冷色 ⇄ 溫暖色（每台裝置各自記住）*/}
+      <button
+        onClick={onTogglePalette}
+        title={palette === 'warm' ? '切換為原本的冷色調' : '切換為溫暖色調'}
+        style={{
+          width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+          background: 'transparent', border: '1px solid var(--line)',
+          fontSize: 16, lineHeight: 1, cursor: 'pointer', padding: 0,
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+        }}
+      >{palette === 'warm' ? '❄️' : '☀️'}</button>
       {isAdmin && (
         <div style={{ display: 'flex', gap: 8 }}>
           <button
@@ -831,7 +825,7 @@ function TopBar({ theme, accent, onReset, onShowQR, onLogout, role, eventInfo })
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
               fontFamily: "'Noto Sans TC', sans-serif",
             }}
-            onMouseEnter={e => { e.currentTarget.style.color='var(--text)'; e.currentTarget.style.borderColor='#3a4555'; }}
+            onMouseEnter={e => { e.currentTarget.style.color='var(--text)'; e.currentTarget.style.borderColor='var(--c-line2)'; }}
             onMouseLeave={e => { e.currentTarget.style.color='var(--dim)'; e.currentTarget.style.borderColor='var(--line)'; }}
           >登出</button>
           <button
@@ -842,7 +836,7 @@ function TopBar({ theme, accent, onReset, onShowQR, onLogout, role, eventInfo })
               fontSize: 12, fontWeight: 600, cursor: 'pointer',
               fontFamily: "'Noto Sans TC', sans-serif",
             }}
-            onMouseEnter={e => { e.currentTarget.style.color='var(--text)'; e.currentTarget.style.borderColor='#3a4555'; }}
+            onMouseEnter={e => { e.currentTarget.style.color='var(--text)'; e.currentTarget.style.borderColor='var(--c-line2)'; }}
             onMouseLeave={e => { e.currentTarget.style.color='var(--muted)'; e.currentTarget.style.borderColor='var(--line)'; }}
           >重設活動</button>
           <button
@@ -861,6 +855,7 @@ function TopBar({ theme, accent, onReset, onShowQR, onLogout, role, eventInfo })
           </button>
         </div>
       )}
+      </div>
     </header>
   );
 }
@@ -913,7 +908,7 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
       // 不設 minWidth：手機橫向若側欄有最小寬度會讓 70%+側欄超出螢幕、
       // 右側場次數被 overflow:hidden 裁掉。平板 30% 本來就夠寬，不受影響。
       minWidth: 0,
-      background: theme === 'minimal' ? '#131820' : '#1a2029',
+      background: theme === 'minimal' ? 'var(--bg)' : 'var(--bg-2)',
       borderLeft: isPortrait ? 'none' : '1px solid var(--line)',
       borderTop: isPortrait ? '1px solid var(--line)' : 'none',
       display: 'flex', flexDirection: 'column',
@@ -986,7 +981,7 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
       }}>
         <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:accent,marginRight:5}}/>場上</span>
         <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'#eab308',marginRight:5}}/>我</span>
-        <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'#3a4555',marginRight:5}}/>休息</span>
+        <span><span style={{display:'inline-block',width:8,height:8,borderRadius:2,background:'var(--c-line2)',marginRight:5}}/>休息</span>
       </div>
 
       {/* 球員清單（可拖回場地球員的放置區）。直向也在此內部捲動。 */}
@@ -1110,7 +1105,7 @@ function AddPlayerDialog({ accent, onAdd, onCancel }) {
       <div
         onClick={function(e) { e.stopPropagation(); }}
         style={{
-          background: '#1a2029', border: '1px solid var(--line)',
+          background: 'var(--bg-2)', border: '1px solid var(--line)',
           borderRadius: 16, padding: '28px 28px 24px',
           width: 320, maxWidth: '90vw',
           boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
@@ -1136,8 +1131,8 @@ function AddPlayerDialog({ accent, onAdd, onCancel }) {
             placeholder="球員名字"
             maxLength={8}
             style={{
-              background: '#0c1016',
-              border: `1.5px solid #2a3340`,
+              background: 'var(--c-deep)',
+              border: `1.5px solid var(--line)`,
               borderRadius: 9, padding: '10px 14px',
               color: '#fff', fontSize: 15, outline: 'none',
               fontFamily: "'Noto Sans TC', sans-serif",
@@ -1265,7 +1260,7 @@ function ImportDialog({ accent, existingNames, onImport, onCancel }) {
       <div
         onClick={function(e) { e.stopPropagation(); }}
         style={{
-          background: '#1a2029', border: '1px solid var(--line)',
+          background: 'var(--bg-2)', border: '1px solid var(--line)',
           borderRadius: 16, padding: '24px 24px 20px',
           width: 460, maxWidth: '94vw', maxHeight: '88vh', overflowY: 'auto',
           boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
@@ -1288,7 +1283,7 @@ function ImportDialog({ accent, existingNames, onImport, onCancel }) {
           placeholder={'🎯 臨打報名\n8.JJ\n9.珉佑\n10.土豆\n11.秉諭 🌐\n...'}
           rows={8}
           style={{
-            background: '#0c1016', border: '1.5px solid #2a3340', borderRadius: 9,
+            background: 'var(--c-deep)', border: '1.5px solid var(--line)', borderRadius: 9,
             padding: '10px 12px', color: '#fff', fontSize: 14, outline: 'none',
             fontFamily: "'JetBrains Mono','Noto Sans TC', monospace", lineHeight: 1.5,
             width: '100%', resize: 'vertical',
@@ -1380,7 +1375,7 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
 
   const stepBtn = {
     width: 44, height: 44, borderRadius: 10,
-    background: '#0c1016', border: '1.5px solid #2a3340',
+    background: 'var(--c-deep)', border: '1.5px solid var(--line)',
     color: 'var(--text)', fontSize: 24, fontWeight: 700, lineHeight: 1,
     cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
     userSelect: 'none',
@@ -1398,7 +1393,7 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
       <div
         onClick={function(e) { e.stopPropagation(); }}
         style={{
-          background: '#1a2029', border: '1px solid var(--line)',
+          background: 'var(--bg-2)', border: '1px solid var(--line)',
           borderRadius: 16, padding: '28px 28px 24px',
           width: 300, maxWidth: '90vw',
           boxShadow: '0 24px 64px rgba(0,0,0,0.7)',
@@ -1454,7 +1449,7 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
               onChange={function(e) { setG(+e.target.value); }}
               style={{
                 width: 90, textAlign: 'center',
-                background: '#0c1016', border: '1.5px solid #2a3340', borderRadius: 9,
+                background: 'var(--c-deep)', border: '1.5px solid var(--line)', borderRadius: 9,
                 padding: '6px 4px', color: '#fff',
                 fontSize: 30, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace",
                 outline: 'none',
@@ -1519,7 +1514,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
   const chip = function(active, col) {
     return {
       background: active ? col : 'transparent',
-      border: '1px solid ' + (active ? col : '#3a4555'),
+      border: '1px solid ' + (active ? col : 'var(--c-line2)'),
       color: active ? '#0a1a10' : 'var(--muted)',
       cursor: 'pointer', padding: '2px 9px', borderRadius: 5,
       fontFamily: "'Noto Sans TC', sans-serif", fontSize: 11, fontWeight: 700,
@@ -1554,7 +1549,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
     >
       <div style={{
         width: 4, height: 30, borderRadius: 2,
-        background: isMe ? highlightColor : onCourt ? accent : '#3a4555',
+        background: isMe ? highlightColor : onCourt ? accent : 'var(--c-line2)',
       }} />
 
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1570,7 +1565,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
               title={player.regular === true ? '取消固定班底' : '設為固定班底'}
               style={{
                 background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
-                color: player.regular === true ? '#fbbf24' : '#3a4555',
+                color: player.regular === true ? '#fbbf24' : 'var(--c-line2)',
                 fontSize: 14, lineHeight: 1, display: 'inline-flex',
               }}
             >★</button>
@@ -1591,7 +1586,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
           }}>季繳</span>}
           {!checkedIn && <span style={{
             fontSize: 9, fontWeight: 700, letterSpacing: 0.5,
-            background: '#2a3340', color: '#c0c7d0',
+            background: 'var(--line)', color: 'var(--c-soft)',
             padding: '1px 6px', borderRadius: 4,
             fontFamily: "'Noto Sans TC', sans-serif",
           }}>未報到</span>}
@@ -1605,7 +1600,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
             <button
               onClick={(e) => { e.stopPropagation(); onBeginEdit(); }}
               style={{
-                background: 'transparent', border: `1px dashed ${hover ? accent : '#3a4555'}`,
+                background: 'transparent', border: `1px dashed ${hover ? accent : 'var(--c-line2)'}`,
                 color: 'var(--text)', cursor: 'pointer',
                 padding: '2px 10px', borderRadius: 5,
                 fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700,
@@ -1688,12 +1683,12 @@ function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
   const shell = {
     minHeight: '100dvh', width: '100vw',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    background: 'radial-gradient(ellipse at top, #1a2533 0%, #131820 50%, #0c1016 100%)',
+    background: 'radial-gradient(ellipse at top, var(--c-grad) 0%, var(--bg) 50%, var(--c-deep) 100%)',
     padding: 24,
   };
   const card = {
     width: '100%', maxWidth: 460, maxHeight: '90dvh',
-    background: '#1a2029', border: '1px solid var(--line)',
+    background: 'var(--bg-2)', border: '1px solid var(--line)',
     borderRadius: 18, padding: '28px 26px',
     boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
     display: 'flex', flexDirection: 'column', gap: 14,
@@ -1758,7 +1753,7 @@ function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
           onChange={function(e) { setQuery(e.target.value); }}
           placeholder="搜尋名字…"
           style={{
-            width: '100%', background: '#0d1218', border: '1.5px solid var(--line)',
+            width: '100%', background: 'var(--c-input)', border: '1.5px solid var(--line)',
             borderRadius: 10, padding: '11px 14px', color: 'var(--text)', fontSize: 15,
             fontFamily: "'Noto Sans TC', sans-serif", outline: 'none',
           }}
@@ -1776,8 +1771,8 @@ function PlayerCheckInScreen({ players, accent, onCheckIn, onSkip }) {
                 onClick={function() { p.checkedIn ? onCheckIn(p.id, false) : setSelId(p.id); }}
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                  background: p.checkedIn ? 'transparent' : '#0d1218',
-                  border: '1px solid ' + (p.checkedIn ? 'var(--line)' : '#2a3340'),
+                  background: p.checkedIn ? 'transparent' : 'var(--c-input)',
+                  border: '1px solid ' + (p.checkedIn ? 'var(--line)' : 'var(--line)'),
                   borderRadius: 10, padding: '12px 14px', cursor: 'pointer', textAlign: 'left',
                   opacity: p.checkedIn ? 0.55 : 1,
                 }}
@@ -1819,12 +1814,12 @@ function JoinScreen({ onJoin, onSkip, theme, accent, role, players, onCheckIn })
     <div style={{
       height: '100vh', width: '100vw',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'radial-gradient(ellipse at top, #1a2533 0%, #131820 50%, #0c1016 100%)',
+      background: 'radial-gradient(ellipse at top, var(--c-grad) 0%, var(--bg) 50%, var(--c-deep) 100%)',
       padding: 24,
     }}>
       <div style={{
         width: '100%', maxWidth: 460,
-        background: '#1a2029', border: '1px solid var(--line)',
+        background: 'var(--bg-2)', border: '1px solid var(--line)',
         borderRadius: 18, padding: '34px 32px',
         boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
       }}>
@@ -1889,7 +1884,7 @@ function JoinScreen({ onJoin, onSkip, theme, accent, role, players, onCheckIn })
           maxLength={8}
           style={{
             width: '100%',
-            background: '#0d1218',
+            background: 'var(--c-input)',
             border: '1.5px solid var(--line)',
             borderRadius: 10, padding: '13px 14px',
             color: 'var(--text)', fontSize: 16,
@@ -1909,7 +1904,7 @@ function JoinScreen({ onJoin, onSkip, theme, accent, role, players, onCheckIn })
           disabled={!name.trim()}
           style={{
             width: '100%', marginTop: 18,
-            background: name.trim() ? accent : '#2a3340',
+            background: name.trim() ? accent : 'var(--line)',
             color: name.trim() ? '#0a1a10' : 'var(--dim)',
             border: 'none', borderRadius: 10,
             padding: '14px', fontSize: 14, fontWeight: 800,
@@ -1980,12 +1975,12 @@ function TweaksPanel({ state, onChange, show }) {
       width: 260, zIndex: 1000,
       background: 'rgba(20,26,34,0.96)',
       backdropFilter: 'blur(14px)',
-      border: '1px solid #2a3340',
+      border: '1px solid var(--line)',
       borderRadius: 14,
       padding: 16,
       boxShadow: '0 20px 60px rgba(0,0,0,0.5)',
       fontFamily: "'Inter','Noto Sans TC',sans-serif",
-      color: '#e8ecf1',
+      color: 'var(--text)',
     }}>
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1995,7 +1990,7 @@ function TweaksPanel({ state, onChange, show }) {
           Tweaks
         </div>
         <div style={{
-          fontSize: 9, color: '#5b6472',
+          fontSize: 9, color: 'var(--dim)',
           fontFamily: "'JetBrains Mono', monospace", letterSpacing: 1.5,
         }}>
           DESIGN
@@ -2004,7 +1999,7 @@ function TweaksPanel({ state, onChange, show }) {
 
       <div style={{ marginBottom: 14 }}>
         <div style={{
-          fontSize: 10, color: '#8892a0',
+          fontSize: 10, color: 'var(--muted)',
           fontFamily: "'JetBrains Mono', monospace",
           letterSpacing: 1.5, fontWeight: 700, marginBottom: 7,
         }}>
@@ -2017,8 +2012,8 @@ function TweaksPanel({ state, onChange, show }) {
               onClick={() => onChange({ theme: t.id })}
               style={{
                 background: state.theme === t.id ? state.accent : 'transparent',
-                color: state.theme === t.id ? '#0a1a10' : '#8892a0',
-                border: state.theme === t.id ? 'none' : '1px solid #2a3340',
+                color: state.theme === t.id ? '#0a1a10' : 'var(--muted)',
+                border: state.theme === t.id ? 'none' : '1px solid var(--line)',
                 borderRadius: 8,
                 padding: '8px 4px',
                 fontSize: 11, fontWeight: 700,
@@ -2033,7 +2028,7 @@ function TweaksPanel({ state, onChange, show }) {
           ))}
         </div>
         <div style={{
-          fontSize: 10, color: '#5b6472', marginTop: 6,
+          fontSize: 10, color: 'var(--dim)', marginTop: 6,
           fontFamily: "'JetBrains Mono', monospace",
         }}>
           {themes.find(t => t.id === state.theme)?.desc}
@@ -2042,7 +2037,7 @@ function TweaksPanel({ state, onChange, show }) {
 
       <div>
         <div style={{
-          fontSize: 10, color: '#8892a0',
+          fontSize: 10, color: 'var(--muted)',
           fontFamily: "'JetBrains Mono', monospace",
           letterSpacing: 1.5, fontWeight: 700, marginBottom: 7,
         }}>
@@ -2096,7 +2091,7 @@ function QRDialog({ url, onClose, accent }) {
       zIndex: 3000, backdropFilter: 'blur(6px)',
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background: '#1a2029', border: '1px solid #2a3340',
+        background: 'var(--bg-2)', border: '1px solid var(--line)',
         borderRadius: 18, padding: 28, width: 420,
         boxShadow: '0 30px 80px rgba(0,0,0,0.6)',
         textAlign: 'center',
@@ -2116,7 +2111,7 @@ function QRDialog({ url, onClose, accent }) {
         </p>
 
         <div style={{
-          background: '#131820', border: `1px solid ${accent}33`,
+          background: 'var(--bg)', border: `1px solid ${accent}33`,
           borderRadius: 14, padding: 18,
           display: 'flex', justifyContent: 'center', alignItems: 'center',
           marginBottom: 16,
@@ -2144,7 +2139,7 @@ function QRDialog({ url, onClose, accent }) {
             readOnly value={url}
             onFocus={(e) => e.target.select()}
             style={{
-              flex: 1, background: '#0d1218', border: '1px solid #2a3340',
+              flex: 1, background: 'var(--c-input)', border: '1px solid var(--line)',
               borderRadius: 8, padding: '9px 12px',
               color: 'var(--text)', fontSize: 12,
               fontFamily: "'JetBrains Mono', monospace",
@@ -2153,7 +2148,7 @@ function QRDialog({ url, onClose, accent }) {
           />
           <button onClick={copy} style={{
             background: copied ? accent : 'transparent',
-            border: `1px solid ${copied ? accent : '#2a3340'}`,
+            border: `1px solid ${copied ? accent : 'var(--line)'}`,
             color: copied ? '#0a1a10' : 'var(--text)',
             borderRadius: 8, padding: '0 14px',
             fontSize: 12, fontWeight: 700, cursor: 'pointer',
@@ -2167,7 +2162,7 @@ function QRDialog({ url, onClose, accent }) {
         <button onClick={onClose} style={{
           width: '100%',
           background: 'transparent', color: 'var(--muted)',
-          border: '1px solid #2a3340', borderRadius: 8,
+          border: '1px solid var(--line)', borderRadius: 8,
           padding: '10px', fontSize: 12, fontWeight: 600,
           cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
         }}>關閉</button>
@@ -2179,29 +2174,62 @@ function QRDialog({ url, onClose, accent }) {
 window.QRDialog = QRDialog;
 
 // ════════════════════════════════════════════════════════════════════════════
-// 球員偏好搭配：想同隊 / 想對面（多選，寫回自己的紀錄）
+// 發起挑戰（球員）：選「想同隊」(最多 1 人) /「想對面」(最多 2 人)，含自己共 2–4 人，
+// 送出後進主辦的訊息欄，由主辦一鍵配對到場地。每人每場活動最多發送 2 次。
 // ════════════════════════════════════════════════════════════════════════════
-function PreferenceDialog({ accent, players, meId, initPartner, initOppo, onSave, onClose }) {
-  const [tab, setTab] = React.useState('partner'); // 'partner' | 'oppo'
-  const [partner, setPartner] = React.useState((initPartner || []).slice());
-  const [oppo, setOppo] = React.useState((initOppo || []).slice());
-  const [saved, setSaved] = React.useState(false);
+var CHALLENGE_LIMIT = 2;
 
+// 挑戰內容的文字摘要：「我＋隊友 🆚 對手、對手」；沒有對手時是「想同隊：我＋隊友」
+function challengeText(meName, partnerNames, oppoNames) {
+  var left = [meName].concat(partnerNames || []).join('＋');
+  if (oppoNames && oppoNames.length) return left + ' 🆚 ' + oppoNames.join('、');
+  return '想同隊：' + left;
+}
+
+function ChallengeDialog({ accent, players, meId, myName, used, onSend, onClose }) {
+  const [tab, setTab] = React.useState('oppo'); // 'partner' | 'oppo'
+  const [partner, setPartner] = React.useState([]);
+  const [oppo, setOppo] = React.useState([]);
+  const [state, setState] = React.useState('edit'); // 'edit' | 'sending' | 'sent'
+
+  const MAX = { partner: 1, oppo: 2 };
+  const left = Math.max(0, CHALLENGE_LIMIT - (used || 0));
   const roster = (players || [])
     .filter(function(p) { return p.id !== meId; })
-    .slice().sort(function(a, b) { return String(a.name).localeCompare(String(b.name), 'zh-Hant'); });
+    .slice().sort(function(a, b) {
+      if (!!a.checkedIn !== !!b.checkedIn) return a.checkedIn ? -1 : 1; // 已報到在前
+      return String(a.name).localeCompare(String(b.name), 'zh-Hant');
+    });
+  const nameOf = function(id) {
+    var p = (players || []).find(function(x) { return x.id === id; });
+    return p ? p.name : '?';
+  };
 
   const cur = tab === 'partner' ? partner : oppo;
-  const setCur = tab === 'partner' ? setPartner : setOppo;
   function toggle(id) {
-    var has = cur.indexOf(id) >= 0;
-    setCur(has ? cur.filter(function(x) { return x !== id; }) : cur.concat([id]));
+    var setCur = tab === 'partner' ? setPartner : setOppo;
+    var setOther = tab === 'partner' ? setOppo : setPartner;
+    var other = tab === 'partner' ? oppo : partner;
+    if (cur.indexOf(id) >= 0) { setCur(cur.filter(function(x) { return x !== id; })); return; }
+    if (cur.length >= MAX[tab]) return;                 // 已達上限
+    if (other.indexOf(id) >= 0) setOther(other.filter(function(x) { return x !== id; })); // 同一人不能兩邊都選
+    setCur(cur.concat([id]));
   }
 
-  function save() { onSave(partner, oppo); setSaved(true); setTimeout(onClose, 900); }
+  const total = 1 + partner.length + oppo.length;       // 含自己
+  const canSend = left > 0 && total >= 2 && total <= 4 && state === 'edit';
 
-  const tabBtn = function(key, label, count) {
-    var on = tab === key;
+  function send() {
+    if (!canSend) return;
+    setState('sending');
+    Promise.resolve(onSend(partner, oppo)).then(function(ok) {
+      if (ok) { setState('sent'); setTimeout(onClose, 1100); }
+      else setState('edit');
+    });
+  }
+
+  const tabBtn = function(key, label) {
+    var on = tab === key, n = key === 'partner' ? partner.length : oppo.length;
     return (
       <button onClick={function() { setTab(key); }} style={{
         flex: 1, background: on ? accent : 'transparent',
@@ -2209,7 +2237,7 @@ function PreferenceDialog({ accent, players, meId, initPartner, initOppo, onSave
         border: '1px solid ' + (on ? accent : 'var(--line)'),
         borderRadius: 8, padding: '8px', fontSize: 13, fontWeight: 800, cursor: 'pointer',
         fontFamily: "'Noto Sans TC', sans-serif",
-      }}>{label}{count > 0 ? ' · ' + count : ''}</button>
+      }}>{label} {n}/{MAX[key]}</button>
     );
   };
 
@@ -2219,49 +2247,83 @@ function PreferenceDialog({ accent, players, meId, initPartner, initOppo, onSave
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
     }}>
       <div onClick={function(e) { e.stopPropagation(); }} style={{
-        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
-        padding: '22px 22px 18px', width: 440, maxWidth: '94vw', maxHeight: '88vh',
+        background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 16,
+        padding: '22px 22px 18px', width: 440, maxWidth: '94vw', maxHeight: '90vh',
         boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
       }}>
-        <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>PREFERENCE 偏好搭配</div>
-        {saved ? (
-          <div style={{ padding: '22px 0', textAlign: 'center', fontSize: 16, fontWeight: 700, color: accent, fontFamily: "'Noto Sans TC', sans-serif" }}>已儲存 ✓</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>CHALLENGE 發起挑戰</div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: left > 0 ? accent : '#f87171', fontFamily: "'Noto Sans TC', sans-serif" }}>
+            剩餘 {left} / {CHALLENGE_LIMIT} 次
+          </div>
+        </div>
+
+        {state === 'sent' ? (
+          <div style={{ padding: '22px 0', textAlign: 'center', fontSize: 16, fontWeight: 700, color: accent, fontFamily: "'Noto Sans TC', sans-serif" }}>挑戰已送出 ✓</div>
+        ) : left <= 0 ? (
+          <React.Fragment>
+            <div style={{ padding: '18px 0', textAlign: 'center', fontSize: 14, color: 'var(--muted)', lineHeight: 1.7, fontFamily: "'Noto Sans TC', sans-serif" }}>
+              這場活動你已經送出 {CHALLENGE_LIMIT} 次挑戰，<br/>次數已用完。
+            </div>
+            <button onClick={onClose} style={{
+              background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
+              borderRadius: 8, padding: '9px', fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
+            }}>關閉</button>
+          </React.Fragment>
         ) : (
           <React.Fragment>
             <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.6, fontFamily: "'Noto Sans TC', sans-serif" }}>
-              勾選你想同隊 / 想對面的球友。系統排點時會<span style={{ color: 'var(--text)' }}>盡量</span>幫你安排（不保證，仍以公平與實力平均為主）。
+              選你想<span style={{ color: 'var(--text)' }}>同隊</span>或想<span style={{ color: 'var(--text)' }}>對面</span>的球友（含自己共 2–4 人），送出後由主辦安排上場。
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              {tabBtn('partner', '想同隊', partner.length)}
-              {tabBtn('oppo', '想對面', oppo.length)}
+              {tabBtn('partner', '想同隊')}
+              {tabBtn('oppo', '想對面')}
             </div>
-            <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 80, maxHeight: '46dvh' }}>
+            <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 6, minHeight: 80, maxHeight: '38dvh' }}>
               {roster.length === 0 ? (
                 <div style={{ color: 'var(--dim)', fontSize: 13, textAlign: 'center', padding: '20px 0', fontFamily: "'Noto Sans TC', sans-serif" }}>名單載入中…</div>
               ) : roster.map(function(p) {
                 var on = cur.indexOf(p.id) >= 0;
+                var inOther = (tab === 'partner' ? oppo : partner).indexOf(p.id) >= 0;
+                var full = !on && cur.length >= MAX[tab];
                 return (
                   <button key={p.id} onClick={function() { toggle(p.id); }} style={{
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-                    background: on ? `${accent}18` : '#0d1218',
-                    border: '1px solid ' + (on ? accent + '88' : '#2a3340'),
-                    borderRadius: 10, padding: '11px 14px', cursor: 'pointer', textAlign: 'left',
+                    background: on ? `${accent}18` : 'var(--c-input)',
+                    border: '1px solid ' + (on ? accent + '88' : 'var(--line)'),
+                    borderRadius: 10, padding: '11px 14px', cursor: full ? 'not-allowed' : 'pointer', textAlign: 'left',
+                    opacity: full ? 0.45 : 1,
                   }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif" }}>{p.name}</span>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif", display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {p.name}
+                      {!p.checkedIn && <span style={{ fontSize: 10, color: 'var(--dim)', fontWeight: 500 }}>未報到</span>}
+                      {inOther && <span style={{ fontSize: 10, color: 'var(--dim)', fontWeight: 500 }}>{tab === 'partner' ? '已選為對面' : '已選為同隊'}</span>}
+                    </span>
                     <span style={{ fontSize: 15, color: on ? accent : 'var(--dim)', fontWeight: 800 }}>{on ? '✓' : '＋'}</span>
                   </button>
                 );
               })}
+            </div>
+            <div style={{
+              background: 'var(--c-input)', border: '1px dashed var(--line)', borderRadius: 10, padding: '10px 12px',
+              fontSize: 14, fontWeight: 700, color: total >= 2 ? 'var(--text)' : 'var(--dim)',
+              fontFamily: "'Noto Sans TC', sans-serif", lineHeight: 1.5, wordBreak: 'break-word',
+            }}>
+              {total >= 2
+                ? challengeText(myName || '我', partner.map(nameOf), oppo.map(nameOf))
+                : '請至少選 1 位球友'}
+              <span style={{ fontSize: 11, color: 'var(--dim)', fontWeight: 500, marginLeft: 8 }}>共 {total} 人</span>
             </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <button onClick={onClose} style={{
                 background: 'transparent', border: '1px solid var(--line)', color: 'var(--muted)',
                 borderRadius: 8, padding: '9px 18px', fontSize: 13, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
               }}>取消</button>
-              <button onClick={save} style={{
-                background: accent, border: 'none', color: '#0a1a10', borderRadius: 8,
-                padding: '9px 22px', fontSize: 13, fontWeight: 800, cursor: 'pointer', fontFamily: "'Noto Sans TC', sans-serif",
-              }}>儲存</button>
+              <button onClick={send} disabled={!canSend} style={{
+                background: canSend ? accent : `${accent}55`, border: 'none', color: '#0a1a10', borderRadius: 8,
+                padding: '9px 22px', fontSize: 13, fontWeight: 800,
+                cursor: canSend ? 'pointer' : 'not-allowed', fontFamily: "'Noto Sans TC', sans-serif",
+              }}>{state === 'sending' ? '送出中…' : '送出挑戰'}</button>
             </div>
           </React.Fragment>
         )}
@@ -2289,7 +2351,7 @@ function MessageComposer({ accent, myName, onSend, onClose }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
     }}>
       <div onClick={function(e) { e.stopPropagation(); }} style={{
-        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
+        background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 16,
         padding: '24px 24px 20px', width: 420, maxWidth: '94vw',
         boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 14,
       }}>
@@ -2306,7 +2368,7 @@ function MessageComposer({ accent, myName, onSend, onClose }) {
               autoFocus rows={4} maxLength={300}
               placeholder="想跟主辦說什麼？"
               style={{
-                background: '#0c1016', border: '1.5px solid #2a3340', borderRadius: 9,
+                background: 'var(--c-deep)', border: '1.5px solid var(--line)', borderRadius: 9,
                 padding: '10px 12px', color: '#fff', fontSize: 15, outline: 'none',
                 fontFamily: "'Noto Sans TC', sans-serif", lineHeight: 1.5, width: '100%', resize: 'vertical',
               }}
@@ -2329,26 +2391,53 @@ function MessageComposer({ accent, myName, onSend, onClose }) {
   );
 }
 
-function MessagesPanel({ accent, messages, onClear, onClose }) {
+// 主辦收件匣：上半「挑戰」依送出順序排列（可一鍵配對到場地），下半一般訊息（新→舊）
+function MessagesPanel({ accent, messages, players, onClear, onClose, onPair }) {
   function fmt(t) {
     if (!t) return '';
     var d = new Date(t);
     var p = function(n) { return (n < 10 ? '0' : '') + n; };
     return p(d.getMonth() + 1) + '/' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
   }
+  var challenges = messages.filter(function(m) { return m.type === 'challenge'; })
+    .slice().sort(function(a, b) { return a.time - b.time; });           // 先送的排前面
+  var normal = messages.filter(function(m) { return m.type !== 'challenge'; });
+  var pendingCount = challenges.filter(function(m) { return !m.done; }).length;
+
+  var nameOf = function(id) {
+    var p = (players || []).find(function(x) { return x.id === id; });
+    return p ? p.name : null;
+  };
+  // 以目前名單的名字重組挑戰內容；找不到人（被刪除）時退回送出當下存的文字
+  function textOf(m) {
+    var me = nameOf(m.fromId), ps = (m.partnerIds || []).map(nameOf), os = (m.oppoIds || []).map(nameOf);
+    if (!me || ps.indexOf(null) >= 0 || os.indexOf(null) >= 0) return m.text;
+    return challengeText(me, ps, os);
+  }
+
+  var sectionTitle = {
+    fontSize: 11, fontWeight: 800, letterSpacing: 1, color: 'var(--muted)',
+    fontFamily: "'Noto Sans TC', sans-serif", marginTop: 2,
+  };
+  var pairBtn = {
+    background: accent, border: 'none', color: '#0a1a10', borderRadius: 7,
+    padding: '6px 12px', fontSize: 12, fontWeight: 800, cursor: 'pointer',
+    fontFamily: "'Noto Sans TC', sans-serif", whiteSpace: 'nowrap',
+  };
+
   return (
     <div onClick={onClose} style={{
       position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.65)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
     }}>
       <div onClick={function(e) { e.stopPropagation(); }} style={{
-        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
-        padding: '22px 22px 18px', width: 460, maxWidth: '94vw', maxHeight: '86vh',
+        background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 16,
+        padding: '22px 22px 18px', width: 480, maxWidth: '94vw', maxHeight: '88vh',
         boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 11, fontWeight: 700, letterSpacing: 2, color: 'var(--muted)' }}>
-            INBOX 球員訊息 · {messages.length}
+            INBOX 訊息 · {messages.length}
           </div>
           {messages.length > 0 && (
             <button onClick={onClear} style={{
@@ -2359,12 +2448,48 @@ function MessagesPanel({ accent, messages, onClear, onClose }) {
           )}
         </div>
         <div style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', display: 'flex', flexDirection: 'column', gap: 8, minHeight: 60 }}>
-          {messages.length === 0 ? (
+          {messages.length === 0 && (
             <div style={{ color: 'var(--dim)', fontSize: 13, textAlign: 'center', padding: '24px 0', fontFamily: "'Noto Sans TC', sans-serif" }}>目前沒有訊息</div>
-          ) : messages.map(function(m) {
+          )}
+
+          {challenges.length > 0 && (
+            <div style={sectionTitle}>⚔️ 挑戰（依送出順序） · 待安排 {pendingCount}</div>
+          )}
+          {challenges.map(function(m, i) {
+            var done = !!m.done;
             return (
               <div key={m.id} style={{
-                background: '#0d1218', border: '1px solid #2a3340', borderRadius: 10, padding: '10px 12px',
+                background: 'var(--c-input)', border: '1px solid ' + (done ? 'var(--line)' : accent + '66'),
+                borderRadius: 10, padding: '10px 12px', opacity: done ? 0.55 : 1,
+                display: 'flex', flexDirection: 'column', gap: 6,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 12, fontWeight: 800, color: accent, fontFamily: "'JetBrains Mono','Noto Sans TC', monospace" }}>
+                    #{i + 1} <span style={{ color: 'var(--muted)', fontWeight: 600 }}>· {m.name} 發起</span>
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--dim)', fontFamily: "'JetBrains Mono', monospace" }}>{fmt(m.time)}</span>
+                </div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif", lineHeight: 1.5, wordBreak: 'break-word' }}>{textOf(m)}</div>
+                {done ? (
+                  <div style={{ fontSize: 12, color: 'var(--muted)', fontFamily: "'Noto Sans TC', sans-serif" }}>
+                    ✓ 已配對到 {(m.done.court || 0) + 7}號場
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 11, color: 'var(--dim)', fontFamily: "'Noto Sans TC', sans-serif" }}>一鍵配對 →</span>
+                    <button onClick={function() { onPair(m, 0); }} style={pairBtn}>排到 7號場</button>
+                    <button onClick={function() { onPair(m, 1); }} style={pairBtn}>排到 8號場</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {normal.length > 0 && challenges.length > 0 && <div style={sectionTitle}>💬 訊息</div>}
+          {normal.map(function(m) {
+            return (
+              <div key={m.id} style={{
+                background: 'var(--c-input)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px',
               }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 4 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: accent, fontFamily: "'Noto Sans TC', sans-serif" }}>{m.name}</span>
@@ -2386,6 +2511,23 @@ function MessagesPanel({ accent, messages, onClear, onClose }) {
 
 // 出場組合紀錄面板（管理者）
 function HistoryPanel({ accent, history, onClose }) {
+  // 名字 + 右上角小字「這是他的第幾場」（舊紀錄沒有場次資料就只顯示名字）
+  function names(list, games) {
+    if (!list || !list.length) return '—';
+    return list.map(function(n, i) {
+      return (
+        <span key={i} style={{ whiteSpace: 'nowrap' }}>
+          {i > 0 ? '、' : ''}{n}
+          {games && games[i] ? (
+            <sup style={{
+              fontSize: 10, fontWeight: 800, marginLeft: 1, opacity: 0.85,
+              fontFamily: "'JetBrains Mono', monospace",
+            }}>{games[i]}</sup>
+          ) : null}
+        </span>
+      );
+    });
+  }
   function fmt(t) {
     if (!t) return '';
     var d = new Date(t), p = function(n) { return (n < 10 ? '0' : '') + n; };
@@ -2397,7 +2539,7 @@ function HistoryPanel({ accent, history, onClose }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
     }}>
       <div onClick={function(e) { e.stopPropagation(); }} style={{
-        background: '#1a2029', border: '1px solid var(--line)', borderRadius: 16,
+        background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 16,
         padding: '22px 22px 18px', width: 480, maxWidth: '94vw', maxHeight: '86vh',
         boxShadow: '0 24px 64px rgba(0,0,0,0.7)', display: 'flex', flexDirection: 'column', gap: 12,
       }}>
@@ -2412,7 +2554,7 @@ function HistoryPanel({ accent, history, onClose }) {
           ) : history.map(function(h) {
             return (
               <div key={h.id} style={{
-                background: '#0d1218', border: '1px solid #2a3340', borderRadius: 10, padding: '10px 12px',
+                background: 'var(--c-input)', border: '1px solid var(--line)', borderRadius: 10, padding: '10px 12px',
                 display: 'flex', flexDirection: 'column', gap: 4,
               }}>
                 <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
@@ -2422,9 +2564,9 @@ function HistoryPanel({ accent, history, onClose }) {
                   <span style={{ fontSize: 10, color: 'var(--dim)', fontFamily: "'JetBrains Mono', monospace" }}>{fmt(h.time)}</span>
                 </div>
                 <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: "'Noto Sans TC', sans-serif", display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ color: accent }}>{(h.teamA || []).join('、') || '—'}</span>
+                  <span style={{ color: accent }}>{names(h.teamA, h.gamesA)}</span>
                   <span style={{ color: 'var(--dim)', fontSize: 12 }}>🆚</span>
-                  <span style={{ color: '#fbbf24' }}>{(h.teamB || []).join('、') || '—'}</span>
+                  <span style={{ color: '#fbbf24' }}>{names(h.teamB, h.gamesB)}</span>
                 </div>
               </div>
             );
@@ -2489,8 +2631,52 @@ function messagesToArray(obj) {
   if (!obj || typeof obj !== 'object') return [];
   return Object.keys(obj).map(function(k) {
     var m = obj[k] || {};
-    return { id: k, name: m.name || '匿名', text: m.text || '', time: m.time || 0 };
+    return {
+      id: k, name: m.name || '匿名', text: m.text || '', time: m.time || 0,
+      // 挑戰專用欄位（一般訊息沒有）
+      type: m.type || 'msg', fromId: m.fromId || null,
+      partnerIds: m.partnerIds || [], oppoIds: m.oppoIds || [], done: m.done || null,
+    };
   }).sort(function(a, b) { return b.time - a.time; });
+}
+// 球員發起挑戰：跟訊息存同一處（/messages），多帶 type 與參與者 id，主辦可一鍵配對
+function sendChallenge(fromId, name, partnerIds, oppoIds, text) {
+  var id = 'm-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+  return fbPut('/messages/' + id, {
+    type: 'challenge', fromId: fromId, name: name || '匿名',
+    partnerIds: partnerIds || [], oppoIds: oppoIds || [],
+    text: String(text).slice(0, 300), time: Date.now(),
+  });
+}
+// 一鍵配對的排法（純函式）：回傳新的兩場配置。
+// A 隊＝aIds（發起人＋想同隊）、B 隊＝bIds（想對面），各最多 2 人；
+// 空位由該場原本的人依序補上；挑戰者若原本在另一場會先被移出，避免同一人出現在兩場。
+window.pairChallengeCourts = function(courts, pMap, aIds, bIds, courtIdx) {
+  var inSet = {};
+  aIds.concat(bIds).forEach(function(id) { inSet[id] = true; });
+  var strip = function(c) {
+    c = c || { teamA: [], teamB: [] };
+    var keep = function(p) { return p && !inSet[p.id]; };
+    return { teamA: (c.teamA || []).filter(keep), teamB: (c.teamB || []).filter(keep) };
+  };
+  var other = courtIdx === 0 ? 1 : 0;
+  var prev = strip(courts[courtIdx]);
+  var rest = prev.teamA.concat(prev.teamB);
+  var teamA = aIds.map(function(id) { return pMap[id]; }).slice(0, 2);
+  var teamB = bIds.map(function(id) { return pMap[id]; }).slice(0, 2);
+  while (teamA.length < 2 && rest.length) teamA.push(rest.shift());
+  while (teamB.length < 2 && rest.length) teamB.push(rest.shift());
+  var next = [];
+  next[courtIdx] = { teamA: teamA, teamB: teamB };
+  next[other] = strip(courts[other]);
+  return next;
+};
+function countMyChallenges(obj, fromId) {
+  if (!obj || typeof obj !== 'object') return 0;
+  return Object.keys(obj).filter(function(k) {
+    var m = obj[k] || {};
+    return m.type === 'challenge' && m.fromId === fromId;
+  }).length;
 }
 
 // 出場組合紀錄（新→舊）
@@ -2500,7 +2686,8 @@ function historyToArray(obj) {
     var h = obj[k] || {};
     return {
       id: k, round: h.round || 0, court: h.court || 0,
-      teamA: h.teamA || [], teamB: h.teamB || [], time: h.time || 0,
+      teamA: h.teamA || [], teamB: h.teamB || [],
+      gamesA: h.gamesA || [], gamesB: h.gamesB || [], time: h.time || 0,
     };
   }).sort(function(a, b) { return b.time - a.time; });
 }
@@ -2658,13 +2845,13 @@ function PasswordOverlay({ accent }) {
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 9999,
-      background: 'radial-gradient(ellipse at center, #1a2533 0%, #0c1016 100%)',
+      background: 'radial-gradient(ellipse at center, var(--c-grad) 0%, var(--c-deep) 100%)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 20, backdropFilter: 'blur(10px)',
     }}>
       <div style={{
         width: '100%', maxWidth: 360, textAlign: 'center',
-        background: '#1a2029', border: `1px solid ${error ? '#ef4444' : 'var(--line)'}`,
+        background: 'var(--bg-2)', border: `1px solid ${error ? '#ef4444' : 'var(--line)'}`,
         borderRadius: 20, padding: '40px 30px',
         boxShadow: '0 40px 100px rgba(0,0,0,0.6)',
         transition: 'all 200ms',
@@ -2686,7 +2873,7 @@ function PasswordOverlay({ accent }) {
           onKeyDown={e => e.key === 'Enter' && check()}
           placeholder="管理員帳號 (Email)"
           style={{
-            width: '100%', background: '#0c1016', border: '1px solid #2a3340',
+            width: '100%', background: 'var(--c-deep)', border: '1px solid var(--line)',
             borderRadius: 10, padding: '12px 16px', color: '#fff',
             fontSize: 14, textAlign: 'center',
             outline: 'none', marginBottom: 10,
@@ -2701,7 +2888,7 @@ function PasswordOverlay({ accent }) {
           onKeyDown={e => e.key === 'Enter' && check()}
           placeholder="••••••••"
           style={{
-            width: '100%', background: '#0c1016', border: '1px solid #2a3340',
+            width: '100%', background: 'var(--c-deep)', border: '1px solid var(--line)',
             borderRadius: 10, padding: '12px 16px', color: '#fff',
             fontSize: 18, textAlign: 'center', letterSpacing: 4,
             outline: 'none', marginBottom: 16,
@@ -2766,10 +2953,22 @@ function App() {
     firebase.auth().signOut();
   }
 
-  var [tweaks, setTweaks] = React.useState(function() {
+  var [tweaksRaw, setTweaks] = React.useState(function() {
     var t = window.__TWEAKS__ || {};
     return { theme: t.theme || 'minimal', accent: t.accent || '#8ff3b5', myName: t.myName || '' };
   });
+
+  // 色調：'cool'（原本的冷色）/ 'warm'（溫暖色）。記在這台裝置的 localStorage，各人各自切換。
+  var [palette, setPalette] = React.useState(function() {
+    try { return localStorage.getItem('badminton_palette') === 'warm' ? 'warm' : 'cool'; } catch (e) { return 'cool'; }
+  });
+  React.useEffect(function() {
+    try { document.documentElement.setAttribute('data-palette', palette); } catch (e) {}
+    try { localStorage.setItem('badminton_palette', palette); } catch (e) {}
+  }, [palette]);
+  function togglePalette() { setPalette(palette === 'warm' ? 'cool' : 'warm'); }
+  // 溫暖色調時把強調色換成琥珀色（中性色由 CSS 變數處理）
+  var tweaks = palette === 'warm' ? Object.assign({}, tweaksRaw, { accent: '#f2b56b' }) : tweaksRaw;
   var [showTweaks, setShowTweaks] = React.useState(false);
 
   // ── 角色判斷：URL 含 ?player 參數即為球員模式 ────────────────────────────
@@ -2836,8 +3035,9 @@ function App() {
   var [history, setHistory] = React.useState([]);
   var [historyOpen, setHistoryOpen] = React.useState(false);
 
-  // 球員偏好搭配對話框
+  // 球員「發起挑戰」對話框；challengeUsed＝自己這場已送出的次數
   var [prefOpen, setPrefOpen] = React.useState(false);
+  var [challengeUsed, setChallengeUsed] = React.useState(0);
 
   // 上場通知（球員端）：alertInfo = { court, kind:'go'|'ready' } 或 null；callSeenRef 記錄各場已處理過的時間戳
   var [alertInfo, setAlertInfo] = React.useState(null);
@@ -2918,7 +3118,7 @@ function App() {
   }, []);
 
   function updateTweaks(partial) {
-    var next = Object.assign({}, tweaks, partial);
+    var next = Object.assign({}, tweaksRaw, partial);
     setTweaks(next);
     window.parent.postMessage({ type: '__edit_mode_set_keys', edits: partial }, '*');
   }
@@ -3061,11 +3261,18 @@ function App() {
     var recCourt = courts[courtIdx] || { teamA: [], teamB: [] };
     var recA = (recCourt.teamA || []).filter(Boolean).map(function(p) { return p.name; });
     var recB = (recCourt.teamB || []).filter(Boolean).map(function(p) { return p.name; });
+    // 這一場是每個人的「第幾場」：以球員名單上的最新出場數 +1（這場打完才會累加）
+    var gamesOf = function(p) {
+      var cur = players.find(function(x) { return x.id === p.id; }) || p;
+      return (cur.games || 0) + 1;
+    };
+    var recGA = (recCourt.teamA || []).filter(Boolean).map(gamesOf);
+    var recGB = (recCourt.teamB || []).filter(Boolean).map(gamesOf);
     if (recA.length || recB.length) {
       var hid = 'h-' + Date.now() + '-' + courtIdx;
       fbPut('/history/' + hid, {
         round: roundNumbers[courtIdx], court: courtIdx,
-        teamA: recA, teamB: recB, time: Date.now(),
+        teamA: recA, teamB: recB, gamesA: recGA, gamesB: recGB, time: Date.now(),
       });
     }
 
@@ -3177,6 +3384,10 @@ function App() {
     fbPut('/callUp', null);
     fbPut('/history', null);
     setHistory([]);
+    // 挑戰是當場有效：重設時清掉所有挑戰（每人的 2 次額度也跟著歸零）；一般訊息保留
+    messages.filter(function(m) { return m.type === 'challenge'; })
+      .forEach(function(m) { fbPut('/messages/' + m.id, null); });
+    setMessages(messages.filter(function(m) { return m.type !== 'challenge'; }));
   }
 
   // ── 左右兩場互換：把兩個場地的整組人對調（場次輪數仍跟著實體場地，不動）──────
@@ -3304,17 +3515,63 @@ function App() {
   function handleSendMessage(text) { sendPlayerMessage(myName, text); }
   function handleClearMessages() { clearMessages(); setMessages([]); }
 
-  // 球員儲存偏好搭配（想同隊 / 想對面的球員 id 陣列）→ 寫回自己的紀錄
-  function handleSavePreferences(wantPartner, wantOppo) {
-    if (!meId) return;
-    fbGet('/players').then(function(current) {
-      var pArr = Array.isArray(current) ? current.map(window.normalizePlayer) : players;
-      var next = pArr.map(function(p) {
-        return p.id === meId ? Object.assign({}, p, { wantPartner: wantPartner || [], wantOppo: wantOppo || [] }) : p;
+  // ── 發起挑戰（球員）─────────────────────────────────────────────────────
+  // 開啟前先查自己這場已送出幾次（每人上限 CHALLENGE_LIMIT 次）
+  function openChallenge() {
+    fbGet('/messages').then(function(all) {
+      setChallengeUsed(countMyChallenges(all, meId));
+      setPrefOpen(true);
+    });
+  }
+  // 送出挑戰；回傳 Promise<boolean>（true＝已送出）。送出前再向伺服器確認一次次數。
+  function handleSendChallenge(partnerIds, oppoIds) {
+    if (!meId) return Promise.resolve(false);
+    return fbGet('/messages').then(function(all) {
+      var used = countMyChallenges(all, meId);
+      setChallengeUsed(used);
+      if (used >= CHALLENGE_LIMIT) {
+        alert('這場活動你已送出 ' + CHALLENGE_LIMIT + ' 次挑戰，次數已用完。');
+        return false;
+      }
+      var nameOf = function(id) { return (players.find(function(p) { return p.id === id; }) || {}).name || '?'; };
+      var text = challengeText(myName || '?', partnerIds.map(nameOf), oppoIds.map(nameOf));
+      return Promise.resolve(sendChallenge(meId, myName, partnerIds, oppoIds, text)).then(function() {
+        setChallengeUsed(used + 1);
+        return true;
       });
-      setPlayers(next);
-      fbPut('/players', next);
-    }).catch(function() {});
+    }).catch(function() { return false; });
+  }
+
+  // ── 一鍵配對（主辦）：把挑戰的人排到指定場地 ─────────────────────────────
+  // A 隊＝發起人＋想同隊；B 隊＝想對面。不足 4 人的空位由該場原本的人依序補上；
+  // 挑戰的人若原本在另一場，會先從那邊移出，避免同一人出現在兩場。
+  function handlePairChallenge(m, courtIdx) {
+    if (role !== 'admin') return;
+    if (animatingCourts[0] || animatingCourts[1]) return;
+    var pMap = {};
+    players.forEach(function(p) { pMap[p.id] = p; });
+    var aIds = [m.fromId].concat(m.partnerIds || []);
+    var bIds = (m.oppoIds || []).slice();
+    var allIds = aIds.concat(bIds);
+
+    if (allIds.some(function(id) { return !pMap[id]; })) {
+      alert('這則挑戰裡有球員已不在名單內，無法配對。');
+      return;
+    }
+    var notIn = allIds.filter(function(id) { return !pMap[id].checkedIn; }).map(function(id) { return pMap[id].name; });
+    if (notIn.length) {
+      alert('尚未報到，無法配對：' + notIn.join('、'));
+      return;
+    }
+
+    var next = window.pairChallengeCourts(courts, pMap, aIds, bIds, courtIdx);
+    setCourts(next);
+    saveToStorage(players, next, roundNumbers);
+
+    // 標記這則挑戰已配對（收件匣會變灰並顯示排到哪一場）
+    var done = { court: courtIdx, time: Date.now() };
+    fbPut('/messages/' + m.id + '/done', done);
+    setMessages(messages.map(function(x) { return x.id === m.id ? Object.assign({}, x, { done: done }) : x; }));
   }
   function openMessages() {
     if (role === 'admin') {
@@ -3409,7 +3666,7 @@ function App() {
       <div style={{
         height: '100vh', width: '100vw',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#0c1016', color: 'var(--muted)',
+        background: 'var(--c-deep)', color: 'var(--muted)',
         fontFamily: "'JetBrains Mono', monospace", fontSize: 12, letterSpacing: 1.5,
       }}>
         LOADING…
@@ -3423,7 +3680,7 @@ function App() {
       <div style={{
         height: '100vh', width: '100vw',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: '#0c1016', color: 'var(--muted)',
+        background: 'var(--c-deep)', color: 'var(--muted)',
         fontFamily: "'JetBrains Mono', monospace", fontSize: 12, letterSpacing: 1.5,
       }}>
         AUTH…
@@ -3457,8 +3714,8 @@ function App() {
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
       background: tweaks.theme === 'minimal'
-        ? '#0c1016'
-        : 'radial-gradient(ellipse at 20% 0%, #1a2533 0%, #131820 60%, #0c1016 100%)',
+        ? 'var(--c-deep)'
+        : 'radial-gradient(ellipse at 20% 0%, var(--c-grad) 0%, var(--bg) 60%, var(--c-deep) 100%)',
     }}>
       <TopBar
         theme={tweaks.theme}
@@ -3468,6 +3725,8 @@ function App() {
         onLogout={handleLogout}
         role={role}
         eventInfo={{ day: 'TUE', time: '20:00-22:00', location: '南科新力羽球館' }}
+        palette={palette}
+        onTogglePalette={togglePalette}
       />
 
       <div style={{
@@ -3549,7 +3808,7 @@ function App() {
           style={{
             position: 'fixed', left: 16, bottom: 16, zIndex: 150,
             height: 54, padding: '0 18px', borderRadius: 27,
-            background: '#232b36', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
+            background: 'var(--bg-3)', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
             fontSize: 14, fontWeight: 800, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.5)',
             display: 'inline-flex', alignItems: 'center', gap: 8,
             fontFamily: "'Noto Sans TC', sans-serif",
@@ -3578,7 +3837,7 @@ function App() {
             padding: '0 5px', borderRadius: 10, background: '#f87171', color: '#fff',
             fontSize: 11, fontWeight: 800, display: 'inline-flex', alignItems: 'center',
             justifyContent: 'center', fontFamily: "'JetBrains Mono', monospace",
-            border: '2px solid #0c1016',
+            border: '2px solid var(--c-deep)',
           }}>{unreadCount > 99 ? '99+' : unreadCount}</span>
         )}
       </button>
@@ -3591,7 +3850,7 @@ function App() {
           style={{
             position: 'fixed', right: 16, bottom: 80, zIndex: 150,
             width: 54, height: 54, borderRadius: '50%',
-            background: '#232b36', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
+            background: 'var(--bg-3)', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
             fontSize: 24, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.5)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}
@@ -3599,20 +3858,21 @@ function App() {
       )}
       {role !== 'admin' && meId && (
         <button
-          onClick={function() { setPrefOpen(true); }}
-          title="偏好搭配：想同隊 / 想對面"
+          onClick={openChallenge}
+          title="發起挑戰：想同隊 / 想對面"
           style={{
             position: 'fixed', right: 16, bottom: 80, zIndex: 150,
             width: 54, height: 54, borderRadius: '50%',
-            background: '#232b36', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
+            background: 'var(--bg-3)', color: tweaks.accent, border: `1px solid ${tweaks.accent}55`,
             fontSize: 24, cursor: 'pointer', boxShadow: '0 8px 22px rgba(0,0,0,0.5)',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           }}
-        >🤝</button>
+        >⚔️</button>
       )}
 
       {msgOpen && role === 'admin' && (
-        <MessagesPanel accent={tweaks.accent} messages={messages}
+        <MessagesPanel accent={tweaks.accent} messages={messages} players={players}
+          onPair={handlePairChallenge}
           onClear={handleClearMessages} onClose={function() { setMsgOpen(false); }} />
       )}
       {msgOpen && role !== 'admin' && (
@@ -3624,11 +3884,10 @@ function App() {
           onClose={function() { setHistoryOpen(false); }} />
       )}
       {prefOpen && role !== 'admin' && meId && (
-        <PreferenceDialog
-          accent={tweaks.accent} players={players} meId={meId}
-          initPartner={(players.find(function(p) { return p.id === meId; }) || {}).wantPartner || []}
-          initOppo={(players.find(function(p) { return p.id === meId; }) || {}).wantOppo || []}
-          onSave={handleSavePreferences}
+        <ChallengeDialog
+          accent={tweaks.accent} players={players} meId={meId} myName={myName}
+          used={challengeUsed}
+          onSend={handleSendChallenge}
           onClose={function() { setPrefOpen(false); }} />
       )}
 
@@ -3678,8 +3937,8 @@ function App() {
         .player-slot:hover { transform: translateY(-2px) scale(1.02); }
         ::-webkit-scrollbar { width: 8px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #2a3340; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #3a4555; }
+        ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--c-line2); }
       `}</style>
     </div>
   );
