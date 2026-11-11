@@ -33,25 +33,41 @@
     --c-line2: #3a4555;
     --c-line3: #4a5566;
     --c-soft: #c0c7d0;
+    /* 疊在底色上的淡線/淡字（深色主題用白、淺色主題用深色） */
+    --c-faint: rgba(255,255,255,0.2);
+    --c-faint-text: rgba(255,255,255,0.4);
+    --c-faint2: rgba(255,255,255,0.08);
+    --c-hover: rgba(255,255,255,0.03);
+    --c-ring: #ffffff;
+    --c-me-text: #fbd34d;
   }
-  /* 溫暖色調（深咖啡底 + 奶油字 + 琥珀強調色）。由 main.js 設 <html data-palette="warm"> 啟用 */
+  /* 溫暖色調：粉彩淺色系，取自使用者提供的色票
+     #D89F97 玫瑰 / #B0B1D9 薰衣草 / #F7BFD5 粉 / #97CFC3 薄荷 / #FEF1A6 鵝黃，底色為淡紫白。
+     由 main.js 設 <html data-palette="warm"> 啟用。強調色在 main.js 另設為略加深的玫瑰 #c9857a
+     （原色 #D89F97 當文字放在淺底上太淡），這裡的 --accent 與之保持一致。 */
   :root[data-palette="warm"]{
-    --bg: #211a16;
-    --bg-2: #2b221d;
-    --bg-3: #3a2e27;
-    --line: #4b3c31;
-    --text: #f5ece1;
-    --muted: #bba999;
-    --dim: #8c7a6b;
-    --active: #f2b56b;
-    --accent: #f2b56b;
-    --c-deep: #181310;
-    --c-input: #1d1714;
-    --c-grad: #36291f;
-    --c-court2: #251d18;
-    --c-line2: #5f4d40;
-    --c-line3: #776251;
-    --c-soft: #dccdbe;
+    --bg: #f3f1fb;        /* 側欄：淡薰衣草 */
+    --bg-2: #ffffff;      /* 卡片 / 對話框 / 場地 */
+    --bg-3: #eceaf7;
+    --line: #d9d7ec;
+    --text: #453f56;
+    --muted: #736c88;
+    --dim: #9d97b3;
+    --active: #97cfc3;
+    --accent: #c9857a;
+    --c-deep: #faf9ff;    /* 整頁底色（色票圖的底） */
+    --c-input: #f7f5fd;
+    --c-grad: #f6e9f0;
+    --c-court2: #f4f2fc;
+    --c-line2: #b0b1d9;   /* 薰衣草：球網、次要框線 */
+    --c-line3: #9a9bc9;
+    --c-soft: #5b5570;
+    --c-faint: rgba(69,63,86,0.28);
+    --c-faint-text: rgba(69,63,86,0.5);
+    --c-faint2: rgba(69,63,86,0.16);
+    --c-hover: rgba(69,63,86,0.04);
+    --c-ring: #453f56;
+    --c-me-text: #a8741a;
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:'Inter','Noto Sans TC',-apple-system,sans-serif;height:100%;overflow:hidden;-webkit-font-smoothing:antialiased}
@@ -152,6 +168,6 @@
 
   <!-- 模組載入順序。?v= 是版本號：每次更新 main.js 時遞增，讓瀏覽器抓到新版
        （GitHub Pages 會快取 main.js，不加版本號會一直用舊的、需強制重新整理）。 -->
-  <script type="text/babel" data-presets="react" src="main.js?v=20261110-2"></script>
+  <script type="text/babel" data-presets="react" src="main.js?v=20261111-1"></script>
 </body>
 </html>

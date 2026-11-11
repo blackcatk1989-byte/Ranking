@@ -688,10 +688,10 @@ function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
           width: '100%', height: '100%', minHeight: 60,
           borderRadius: 10,
           touchAction: 'manipulation',
-          border: `1.5px dashed ${dragOver ? accent : 'rgba(255,255,255,0.2)'}`,
+          border: `1.5px dashed ${dragOver ? accent : 'var(--c-faint)'}`,
           background: dragOver ? `${accent}22` : 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: dragOver ? accent : 'rgba(255,255,255,0.4)', fontSize: 11,
+          color: dragOver ? accent : 'var(--c-faint-text)', fontSize: 11,
           fontFamily: "'JetBrains Mono', monospace",
           transition: 'all 140ms ease',
         }}
@@ -720,7 +720,7 @@ function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: '6px 10px',
         cursor: isAdmin ? 'grab' : 'default',
-        border: isMe ? `2px solid #fff` : `1px solid ${highlightColor}`,
+        border: isMe ? `2px solid var(--c-ring)` : `1px solid ${highlightColor}`,
         position: 'relative',
         transition: 'transform 200ms cubic-bezier(.4,.0,.2,1), background 120ms',
         userSelect: 'none',
@@ -1020,7 +1020,7 @@ function Sidebar({ players, onCourtIds, meId, theme, accent, role, onEditLevel, 
               margin: '6px 0 2px',
               padding: '10px 14px',
               borderRadius: 8,
-              border: `1.5px dashed ${dragOverBench ? accent : 'rgba(255,255,255,0.08)'}`,
+              border: `1.5px dashed ${dragOverBench ? accent : 'var(--c-faint2)'}`,
               background: dragOverBench ? `${accent}18` : 'transparent',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
               color: dragOverBench ? accent : 'var(--dim)',
@@ -1134,7 +1134,7 @@ function AddPlayerDialog({ accent, onAdd, onCancel }) {
               background: 'var(--c-deep)',
               border: `1.5px solid var(--line)`,
               borderRadius: 9, padding: '10px 14px',
-              color: '#fff', fontSize: 15, outline: 'none',
+              color: 'var(--text)', fontSize: 15, outline: 'none',
               fontFamily: "'Noto Sans TC', sans-serif",
               width: '100%',
             }}
@@ -1284,7 +1284,7 @@ function ImportDialog({ accent, existingNames, onImport, onCancel }) {
           rows={8}
           style={{
             background: 'var(--c-deep)', border: '1.5px solid var(--line)', borderRadius: 9,
-            padding: '10px 12px', color: '#fff', fontSize: 14, outline: 'none',
+            padding: '10px 12px', color: 'var(--text)', fontSize: 14, outline: 'none',
             fontFamily: "'JetBrains Mono','Noto Sans TC', monospace", lineHeight: 1.5,
             width: '100%', resize: 'vertical',
           }}
@@ -1450,7 +1450,7 @@ function LevelDialog({ player, accent, onCommit, onCancel }) {
               style={{
                 width: 90, textAlign: 'center',
                 background: 'var(--c-deep)', border: '1.5px solid var(--line)', borderRadius: 9,
-                padding: '6px 4px', color: '#fff',
+                padding: '6px 4px', color: 'var(--text)',
                 fontSize: 30, fontWeight: 800, fontFamily: "'JetBrains Mono', monospace",
                 outline: 'none',
               }}
@@ -1536,7 +1536,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
         borderRadius: 8,
         background: isMe
           ? `${highlightColor}1a`
-          : onCourt ? `${accent}15` : (hover ? 'rgba(255,255,255,0.03)' : 'transparent'),
+          : onCourt ? `${accent}15` : (hover ? 'var(--c-hover)' : 'transparent'),
         border: isMe
           ? `1px solid ${highlightColor}66`
           : onCourt ? `1px solid ${accent}33` : '1px solid transparent',
@@ -1557,7 +1557,7 @@ function PlayerRow({ player, onCourt, isMe, theme, accent, isAdmin, onBeginEdit,
           fontWeight: 600, fontSize: 14,
           fontFamily: "'Noto Sans TC', sans-serif",
           display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap',
-          color: isMe ? '#fbd34d' : (checkedIn ? 'var(--text)' : 'var(--dim)'),
+          color: isMe ? 'var(--c-me-text)' : (checkedIn ? 'var(--text)' : 'var(--dim)'),
         }}>
           {isAdmin ? (
             <button
@@ -2369,7 +2369,7 @@ function MessageComposer({ accent, myName, onSend, onClose }) {
               placeholder="想跟主辦說什麼？"
               style={{
                 background: 'var(--c-deep)', border: '1.5px solid var(--line)', borderRadius: 9,
-                padding: '10px 12px', color: '#fff', fontSize: 15, outline: 'none',
+                padding: '10px 12px', color: 'var(--text)', fontSize: 15, outline: 'none',
                 fontFamily: "'Noto Sans TC', sans-serif", lineHeight: 1.5, width: '100%', resize: 'vertical',
               }}
             />
@@ -2874,7 +2874,7 @@ function PasswordOverlay({ accent }) {
           placeholder="管理員帳號 (Email)"
           style={{
             width: '100%', background: 'var(--c-deep)', border: '1px solid var(--line)',
-            borderRadius: 10, padding: '12px 16px', color: '#fff',
+            borderRadius: 10, padding: '12px 16px', color: 'var(--text)',
             fontSize: 14, textAlign: 'center',
             outline: 'none', marginBottom: 10,
           }}
@@ -2889,7 +2889,7 @@ function PasswordOverlay({ accent }) {
           placeholder="••••••••"
           style={{
             width: '100%', background: 'var(--c-deep)', border: '1px solid var(--line)',
-            borderRadius: 10, padding: '12px 16px', color: '#fff',
+            borderRadius: 10, padding: '12px 16px', color: 'var(--text)',
             fontSize: 18, textAlign: 'center', letterSpacing: 4,
             outline: 'none', marginBottom: 16,
           }}
@@ -2968,7 +2968,7 @@ function App() {
   }, [palette]);
   function togglePalette() { setPalette(palette === 'warm' ? 'cool' : 'warm'); }
   // 溫暖色調時把強調色換成琥珀色（中性色由 CSS 變數處理）
-  var tweaks = palette === 'warm' ? Object.assign({}, tweaksRaw, { accent: '#f2b56b' }) : tweaksRaw;
+  var tweaks = palette === 'warm' ? Object.assign({}, tweaksRaw, { accent: '#c9857a' }) : tweaksRaw;
   var [showTweaks, setShowTweaks] = React.useState(false);
 
   // ── 角色判斷：URL 含 ?player 參數即為球員模式 ────────────────────────────
