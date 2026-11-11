@@ -2510,7 +2510,38 @@ function MessagesPanel({ accent, messages, players, onClear, onClose, onPair }) 
 }
 
 // 出場組合紀錄面板（管理者）
-function HistoryPanel({ accent, history, onClose }) {
+// 補齊舊紀錄的「第幾場」：功能上線前的紀錄沒存 gamesA/gamesB，
+// 這裡依每個人在紀錄中出現的先後順序回推；若他之後某筆有存數字，就以那筆為基準對齊
+// （例如第 5 次出現存的是 6，則第 4 次出現＝5），沒有任何基準時就用出現次數。
+window.fillHistoryGames = function(history) {
+  var asc = history.slice().sort(function(a, b) { return a.time - b.time; });
+  var seen = {};   // name -> [{ rec, side, idx, stored }]
+  asc.forEach(function(h) {
+    [['teamA', 'gamesA'], ['teamB', 'gamesB']].forEach(function(pair) {
+      (h[pair[0]] || []).forEach(function(name, i) {
+        (seen[name] = seen[name] || []).push({ id: h.id, key: pair[1], i: i, stored: (h[pair[1]] || [])[i] || 0 });
+      });
+    });
+  });
+  var out = {};    // id -> { gamesA: [], gamesB: [] }
+  Object.keys(seen).forEach(function(name) {
+    var list = seen[name], offset = 0;
+    for (var k = 0; k < list.length; k++) {
+      if (list[k].stored) { offset = list[k].stored - (k + 1); break; }
+    }
+    list.forEach(function(e, k) {
+      var o = out[e.id] = out[e.id] || { gamesA: [], gamesB: [] };
+      o[e.key][e.i] = e.stored || Math.max(1, k + 1 + offset);
+    });
+  });
+  return history.map(function(h) {
+    var o = out[h.id] || {};
+    return Object.assign({}, h, { gamesA: o.gamesA || [], gamesB: o.gamesB || [] });
+  });
+};
+
+function HistoryPanel({ accent, history: rawHistory, onClose }) {
+  var history = window.fillHistoryGames(rawHistory || []);
   // 名字 + 右上角小字「這是他的第幾場」（舊紀錄沒有場次資料就只顯示名字）
   function names(list, games) {
     if (!list || !list.length) return '—';
