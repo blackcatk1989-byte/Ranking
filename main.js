@@ -524,7 +524,7 @@ window.useDragSource = function(makeSrc, enabled, label) {
 // ════════════════════════════════════════════════════════════════════════════
 
 // 直式羽球場 - 支援 role (admin/player)
-function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNext, onCall, animating, role, compact }) {
+function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNext, onCall, animating, role, compact, palette }) {
   const isAdmin = role === 'admin';
   const courtColor = theme === 'minimal' ? 'var(--bg-2)' : '#0f5a36';
   const courtDark = theme === 'minimal' ? 'var(--c-court2)' : '#0a4428';
@@ -645,7 +645,7 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
           alignItems: 'center', justifyItems: 'center',
         }}>
           {[0, 1].map(i => (
-            <PlayerSlot key={`A${i}`} player={teamA[i]} meId={meId} team="A" theme={theme} accent={accent} court={index} pos={i} role={role} />
+            <PlayerSlot key={`A${i}`} player={teamA[i]} meId={meId} team="A" theme={theme} accent={accent} court={index} pos={i} role={role} palette={palette} />
           ))}
         </div>
         <div style={{
@@ -654,7 +654,7 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
           alignItems: 'center', justifyItems: 'center',
         }}>
           {[0, 1].map(i => (
-            <PlayerSlot key={`B${i}`} player={teamB[i]} meId={meId} team="B" theme={theme} accent={accent} court={index} pos={i} role={role} />
+            <PlayerSlot key={`B${i}`} player={teamB[i]} meId={meId} team="B" theme={theme} accent={accent} court={index} pos={i} role={role} palette={palette} />
           ))}
         </div>
       </div>
@@ -662,7 +662,10 @@ function Court({ index, teamA = [], teamB = [], meId, theme, accent, round, onNe
   );
 }
 
-function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
+// 溫暖色調場上卡片跳色：A隊 玫瑰/粉、B隊 薰衣草/薄荷（取自使用者色票）
+var WARM_SLOT_COLORS = { A0: '#d89f97', A1: '#f7bfd5', B0: '#b0b1d9', B1: '#97cfc3' };
+
+function PlayerSlot({ player, meId, team, theme, accent, court, pos, role, palette }) {
   const isAdmin = role === 'admin';
   const isMe = player && player.id === meId;
 
@@ -700,7 +703,9 @@ function PlayerSlot({ player, meId, team, theme, accent, court, pos, role }) {
   }
 
   // ── Player card ────────────────────────────────────────────────────────────
-  const highlightColor = isMe ? '#eab308' : accent;
+  // 溫暖色調：場上四張卡依位置跳色（色票的玫瑰/粉/薰衣草/薄荷）；冷色調維持單一強調色
+  const slotColor = palette === 'warm' ? WARM_SLOT_COLORS[team + pos] : accent;
+  const highlightColor = isMe ? '#eab308' : slotColor;
   const bgGradient = theme === 'minimal' ? highlightColor : `linear-gradient(160deg, ${highlightColor}, ${highlightColor}dd)`;
 
   return (
@@ -3801,6 +3806,7 @@ function App() {
                   onNext={function() { handleNextCourt(i); }}
                   onCall={function() { handleCallUp(i); }}
                   compact={isPortrait}
+                  palette={palette}
                   animating={animatingCourts[i]}
                   role={role}
                 />
